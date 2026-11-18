@@ -89,6 +89,8 @@ PR 步骤：
 
 合并后站点与 dshmarket 通常一天内自动跟进。npm 是否发布**不影响收录**，条目里不要手写 `npm:` 字段（会被拒）。
 
+截图（可选）：市场详情页会读仓库根的 `screenshots.json` 显示截图（见本仓库已放置的版本，路径相对于该文件，1–8 张）。没写时会退回从 README 抽图。
+
 ### 4.2 官方 Discover（`@deepseek-ai/dsh-plugin-market`）
 
 默认没有任何索引源，需要用户自己加。dshmarket 的目录已被转成 format-1 索引：

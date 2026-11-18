@@ -2,9 +2,11 @@
 
 Turn the **DeepSeek Harness (DSH)** sidebar's workspace region into **portrait folder cards**: one card per folder, and a droplet transition into that folder's conversations — with a reverse ripple when you go back.
 
+![Real screenshot: folder cards in the sidebar](docs/screenshots/screenshot-1.png)
+
 ![Layout diagram (not a screenshot)](docs/layout.svg)
 
-> The image above is a layout diagram. Real screenshots are welcome in `docs/screenshots/` — PRs accepted.
+> Top: the plugin running in DSH. Bottom: a hand-drawn layout diagram. Add new screenshots under `docs/screenshots/` and list them in `screenshots.json` — PRs accepted.
 
 ## What it does
 

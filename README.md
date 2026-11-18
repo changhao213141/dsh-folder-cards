@@ -6,7 +6,7 @@
 
 ![布局示意（非截图）](docs/layout.svg)
 
-> 上为 DSH 里的实际效果（截图），下为布局示意（手绘 SVG）。真实截图欢迎使用后补到 `docs/screenshots/`，提 PR 我会合并。
+> 上为 DSH 里的实际效果（截图），下为布局示意（手绘 SVG）。新的截图可以放到 `docs/screenshots/` 并加进 `screenshots.json`，提 PR 我会合并。
 
 ## 为什么做这个
 
