@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="Folder cards">
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="#1f2733"/>
+  <rect x="9" y="11" width="21" height="27" rx="5" fill="#3b4b60"/>
+  <rect x="34" y="11" width="21" height="27" rx="5" fill="#3b4b60"/>
+  <path d="M14 22.5a2.5 2.5 0 0 1 2.5-2.5h3.6c.5 0 1 .2 1.35.56l1.2 1.2h5.85a2.5 2.5 0 0 1 2.5 2.5v.94H14V22.5Z" fill="#8fb3d9"/>
+  <path d="M14 25.2h16.9v6.1a2.5 2.5 0 0 1-2.5 2.5h-11.9a2.5 2.5 0 0 1-2.5-2.5v-6.1Z" fill="#c6dcf5"/>
+  <path d="M39 22.5a2.5 2.5 0 0 1 2.5-2.5h3.6c.5 0 1 .2 1.35.56l1.2 1.2h5.85a2.5 2.5 0 0 1 2.5 2.5v.94H39V22.5Z" fill="#8fb3d9"/>
+  <path d="M39 25.2h16.9v6.1a2.5 2.5 0 0 1-2.5 2.5h-11.9a2.5 2.5 0 0 1-2.5-2.5v-6.1Z" fill="#c6dcf5"/>
+  <rect x="9" y="45" width="46" height="4" rx="2" fill="#3b4b60"/>
+  <rect x="9" y="52" width="30" height="4" rx="2" fill="#2a3546"/>
+</svg>
