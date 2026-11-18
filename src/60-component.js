@@ -294,6 +294,7 @@
             title,
             pinned: pinned.has(id),
             running: isRunning(statuses, summary),
+            attention: sessionAttention(statuses, id),
             updatedAt: Number(summary.updatedAt) || 0,
             current: id === currentSessionId,
           });
@@ -630,6 +631,23 @@
         && (workspaceState.phase === 'pending' || workspaceState.state === 'loading');
       const failed = items.length === 0 && workspaceState.state === 'error';
 
+      /* What each folder wants from the user right now: an approval/question,
+         or a finished run nobody has opened yet. The strongest state wins, so
+         a folder waiting on you never hides behind a "finished" dot. */
+      const attention = useMemo(() => {
+        const levels = new Map();
+        const note = (workspaceId, sessionId) => {
+          const level = sessionAttention(statuses, sessionId);
+          if (level === null) return;
+          if (level === 'pending' || levels.get(workspaceId) !== 'pending') levels.set(workspaceId, level);
+        };
+        for (const item of items) {
+          for (const id of Array.isArray(item.sessionIds) ? item.sessionIds : []) note(item.workspaceId, id);
+        }
+        for (const id of ungrouped) note(UNGROUPED_KEY, id);
+        return levels;
+      }, [items, ungrouped, statuses]);
+
       /* Cards in the chosen order: registry order, or most recently used folder
          first (a folder without sessions keeps the lowest rank). */
       const cardSpecs = useMemo(() => {
@@ -647,14 +665,35 @@
           id: item.workspaceId,
           title: workspaceTitle(item, t),
           image: images[item.workspaceId] || '',
+          attention: attention.get(item.workspaceId) || null,
           lastActivity: lastActivity(item),
         }));
         if (sort === 'recent') specs.sort((left, right) => right.lastActivity - left.lastActivity);
         if (ungrouped.length > 0) {
-          specs.push({ id: UNGROUPED_KEY, title: t('ungrouped'), image: images[UNGROUPED_KEY] || '', lastActivity: 0 });
+          specs.push({
+            id: UNGROUPED_KEY,
+            title: t('ungrouped'),
+            image: images[UNGROUPED_KEY] || '',
+            attention: attention.get(UNGROUPED_KEY) || null,
+            lastActivity: 0,
+          });
         }
         return specs;
-      }, [items, images, sort, ungrouped, byId, t]);
+      }, [items, images, sort, ungrouped, byId, attention, t]);
+
+      /** Accessible name that carries the card's attention state. */
+      const cardLabel = spec => {
+        if (spec.attention === 'pending') return `${spec.title} · ${t('needsYou')}`;
+        if (spec.attention === 'done') return `${spec.title} · ${t('finishedUnread')}`;
+        return spec.title;
+      };
+
+      const attentionBadge = spec => (spec.attention === null
+        ? null
+        : h('span', {
+            className: 'dsh-fc-badge' + (spec.attention === 'pending' ? ' is-pending' : ''),
+            'aria-hidden': true,
+          }));
 
       if (!wide) {
         return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
@@ -664,13 +703,14 @@
             key: spec.id,
             type: 'button',
             className: 'dsh-fc-railBtn',
-            title: spec.title,
-            'aria-label': spec.title,
+            title: cardLabel(spec),
+            'aria-label': cardLabel(spec),
             onClick: () => {
               enterFolder(spec.id);
               if (typeof props.expandSidebar === 'function') props.expandSidebar();
             },
-          }, spec.image ? h('img', { src: spec.image, alt: '', draggable: false }) : folderGlyph())),
+          }, spec.image ? h('img', { src: spec.image, alt: '', draggable: false }) : folderGlyph(),
+            attentionBadge(spec))),
         );
       }
 
@@ -684,8 +724,8 @@
               else cardRefs.current.delete(spec.id);
             },
             className: 'dsh-fc-card' + (hasImage ? ' has-image' : ''),
-            title: spec.title,
-            'aria-label': spec.title,
+            title: cardLabel(spec),
+            'aria-label': cardLabel(spec),
             onClick: event => {
               const rect = event.currentTarget.getBoundingClientRect();
               const x = event.clientX > 0 ? event.clientX : rect.left + rect.width / 2;
@@ -705,6 +745,7 @@
             ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
             : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
           h('span', { className: 'dsh-fc-name' }, spec.title),
+          attentionBadge(spec),
           ),
           h('div', { className: 'dsh-fc-tools' },
             h('button', {
@@ -851,7 +892,10 @@
             },
           },
           h('span', {
-            className: 'dsh-fc-dot' + (row.running ? ' is-running' : ''),
+            className: 'dsh-fc-dot'
+              + (row.attention === 'pending' ? ' is-pending'
+                : row.attention === 'done' ? ' is-done'
+                  : row.running ? ' is-running' : ''),
             title: row.running ? t('running') : null,
             'aria-hidden': true,
           }),

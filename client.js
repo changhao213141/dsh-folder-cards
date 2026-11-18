@@ -65,6 +65,8 @@ window.__ModuleLoader__.load({
       searching: '正在搜索…',
       clearSearch: '关闭搜索',
       sessionMenu: '会话操作',
+      needsYou: '需要你处理',
+      finishedUnread: '有新的运行结果',
       viewOptions: '视图选项',
       sortBy: '排序',
       sortManual: '默认顺序',
@@ -113,6 +115,8 @@ window.__ModuleLoader__.load({
       searching: 'Searching…',
       clearSearch: 'Close search',
       sessionMenu: 'Conversation actions',
+      needsYou: 'Needs your approval or answer',
+      finishedUnread: 'New run finished',
       viewOptions: 'View options',
       sortBy: 'Sort',
       sortManual: 'Folder order',
@@ -441,6 +445,9 @@ window.__ModuleLoader__.load({
   opacity: 0.55;
 }
 .dsh-fc-dot.is-running { background: var(--dsw-alias-brand-primary); opacity: 1; }
+/* Amber waits for the user; green is a finished run not opened yet. */
+.dsh-fc-dot.is-pending { background: var(--dsw-alias-state-warn-primary); opacity: 1; }
+.dsh-fc-dot.is-done { background: var(--dsw-alias-state-success-primary); opacity: 1; }
 .dsh-fc-row.is-new { color: var(--dsw-alias-label-secondary); }
 .dsh-fc-row.is-new:hover { color: var(--dsw-alias-label-primary); }
 .dsh-fc-empty {
@@ -456,6 +463,7 @@ window.__ModuleLoader__.load({
   overflow-y: auto;
 }
 .dsh-fc-railBtn {
+  position: relative;
   flex: none;
   width: 38px;
   height: 46px;
@@ -474,6 +482,26 @@ window.__ModuleLoader__.load({
 .dsh-fc-railBtn img { width: 100%; height: 100%; object-fit: cover; }
 .dsh-fc-railBtn svg { width: 20px; height: 20px; }
 .dsh-fc-file { display: none; }
+/* Bottom-left attention dot on a folder card: amber means the folder waits for
+   an approval, a plan review or an answer; it pulses so it is noticed. */
+.dsh-fc-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warn-primary);
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1);
+  pointer-events: none;
+}
+.dsh-fc-card.has-image .dsh-fc-badge { bottom: 27px; }
+.dsh-fc-badge.is-pending { animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite; }
+@keyframes dsh-fc-badge-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.72; }
+}
 .dsh-fc-search {
   flex: 1;
   min-width: 0;
@@ -669,6 +697,7 @@ window.__ModuleLoader__.load({
   .dsh-fc-card, .dsh-fc-tools, .dsh-fc-thumb { transition: none; }
   .dsh-fc-panel, .dsh-fc-scrollRegion { animation: none; }
   .dsh-fc-ripple { display: none; }
+  .dsh-fc-badge.is-pending { animation: none; }
 }
 `;
 
@@ -764,6 +793,31 @@ window.__ModuleLoader__.load({
         /* fall through to the catalog flag */
       }
       return summary.running === true;
+    }
+
+    /** Status lookup that tolerates a missing or unreadable status map. */
+    function sessionStatusOf(statuses, sessionId) {
+      try {
+        if (statuses && typeof statuses.get === 'function') return statuses.get(sessionId) || null;
+      } catch (error) {
+        /* treat an unreadable map as no status */
+      }
+      return null;
+    }
+
+    /**
+     * What one Session wants from the user: `pending` when it waits for an
+     * approval, a plan review or an answer, `done` when a run finished and was
+     * never looked at. Mirrors the shipped sidebar's row semantics.
+     * @returns 'pending' | 'done' | null
+     */
+    function sessionAttention(statuses, sessionId) {
+      const status = sessionStatusOf(statuses, sessionId);
+      if (!status) return null;
+      const kind = status.pendingInteraction && status.pendingInteraction.kind;
+      if (kind === 'approval' || kind === 'plan-review' || kind === 'question') return 'pending';
+      if (status.completionUnread === true) return 'done';
+      return null;
     }
 
     function timeLabel(updatedAt, now, t) {
@@ -1362,6 +1416,7 @@ window.__ModuleLoader__.load({
             title,
             pinned: pinned.has(id),
             running: isRunning(statuses, summary),
+            attention: sessionAttention(statuses, id),
             updatedAt: Number(summary.updatedAt) || 0,
             current: id === currentSessionId,
           });
@@ -1698,6 +1753,23 @@ window.__ModuleLoader__.load({
         && (workspaceState.phase === 'pending' || workspaceState.state === 'loading');
       const failed = items.length === 0 && workspaceState.state === 'error';
 
+      /* What each folder wants from the user right now: an approval/question,
+         or a finished run nobody has opened yet. The strongest state wins, so
+         a folder waiting on you never hides behind a "finished" dot. */
+      const attention = useMemo(() => {
+        const levels = new Map();
+        const note = (workspaceId, sessionId) => {
+          const level = sessionAttention(statuses, sessionId);
+          if (level === null) return;
+          if (level === 'pending' || levels.get(workspaceId) !== 'pending') levels.set(workspaceId, level);
+        };
+        for (const item of items) {
+          for (const id of Array.isArray(item.sessionIds) ? item.sessionIds : []) note(item.workspaceId, id);
+        }
+        for (const id of ungrouped) note(UNGROUPED_KEY, id);
+        return levels;
+      }, [items, ungrouped, statuses]);
+
       /* Cards in the chosen order: registry order, or most recently used folder
          first (a folder without sessions keeps the lowest rank). */
       const cardSpecs = useMemo(() => {
@@ -1715,14 +1787,35 @@ window.__ModuleLoader__.load({
           id: item.workspaceId,
           title: workspaceTitle(item, t),
           image: images[item.workspaceId] || '',
+          attention: attention.get(item.workspaceId) || null,
           lastActivity: lastActivity(item),
         }));
         if (sort === 'recent') specs.sort((left, right) => right.lastActivity - left.lastActivity);
         if (ungrouped.length > 0) {
-          specs.push({ id: UNGROUPED_KEY, title: t('ungrouped'), image: images[UNGROUPED_KEY] || '', lastActivity: 0 });
+          specs.push({
+            id: UNGROUPED_KEY,
+            title: t('ungrouped'),
+            image: images[UNGROUPED_KEY] || '',
+            attention: attention.get(UNGROUPED_KEY) || null,
+            lastActivity: 0,
+          });
         }
         return specs;
-      }, [items, images, sort, ungrouped, byId, t]);
+      }, [items, images, sort, ungrouped, byId, attention, t]);
+
+      /** Accessible name that carries the card's attention state. */
+      const cardLabel = spec => {
+        if (spec.attention === 'pending') return `${spec.title} · ${t('needsYou')}`;
+        if (spec.attention === 'done') return `${spec.title} · ${t('finishedUnread')}`;
+        return spec.title;
+      };
+
+      const attentionBadge = spec => (spec.attention === null
+        ? null
+        : h('span', {
+            className: 'dsh-fc-badge' + (spec.attention === 'pending' ? ' is-pending' : ''),
+            'aria-hidden': true,
+          }));
 
       if (!wide) {
         return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
@@ -1732,13 +1825,14 @@ window.__ModuleLoader__.load({
             key: spec.id,
             type: 'button',
             className: 'dsh-fc-railBtn',
-            title: spec.title,
-            'aria-label': spec.title,
+            title: cardLabel(spec),
+            'aria-label': cardLabel(spec),
             onClick: () => {
               enterFolder(spec.id);
               if (typeof props.expandSidebar === 'function') props.expandSidebar();
             },
-          }, spec.image ? h('img', { src: spec.image, alt: '', draggable: false }) : folderGlyph())),
+          }, spec.image ? h('img', { src: spec.image, alt: '', draggable: false }) : folderGlyph(),
+            attentionBadge(spec))),
         );
       }
 
@@ -1752,8 +1846,8 @@ window.__ModuleLoader__.load({
               else cardRefs.current.delete(spec.id);
             },
             className: 'dsh-fc-card' + (hasImage ? ' has-image' : ''),
-            title: spec.title,
-            'aria-label': spec.title,
+            title: cardLabel(spec),
+            'aria-label': cardLabel(spec),
             onClick: event => {
               const rect = event.currentTarget.getBoundingClientRect();
               const x = event.clientX > 0 ? event.clientX : rect.left + rect.width / 2;
@@ -1773,6 +1867,7 @@ window.__ModuleLoader__.load({
             ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
             : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
           h('span', { className: 'dsh-fc-name' }, spec.title),
+          attentionBadge(spec),
           ),
           h('div', { className: 'dsh-fc-tools' },
             h('button', {
@@ -1919,7 +2014,10 @@ window.__ModuleLoader__.load({
             },
           },
           h('span', {
-            className: 'dsh-fc-dot' + (row.running ? ' is-running' : ''),
+            className: 'dsh-fc-dot'
+              + (row.attention === 'pending' ? ' is-pending'
+                : row.attention === 'done' ? ' is-done'
+                  : row.running ? ' is-running' : ''),
             title: row.running ? t('running') : null,
             'aria-hidden': true,
           }),

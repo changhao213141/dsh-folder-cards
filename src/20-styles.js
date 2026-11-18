@@ -308,6 +308,9 @@
   opacity: 0.55;
 }
 .dsh-fc-dot.is-running { background: var(--dsw-alias-brand-primary); opacity: 1; }
+/* Amber waits for the user; green is a finished run not opened yet. */
+.dsh-fc-dot.is-pending { background: var(--dsw-alias-state-warn-primary); opacity: 1; }
+.dsh-fc-dot.is-done { background: var(--dsw-alias-state-success-primary); opacity: 1; }
 .dsh-fc-row.is-new { color: var(--dsw-alias-label-secondary); }
 .dsh-fc-row.is-new:hover { color: var(--dsw-alias-label-primary); }
 .dsh-fc-empty {
@@ -323,6 +326,7 @@
   overflow-y: auto;
 }
 .dsh-fc-railBtn {
+  position: relative;
   flex: none;
   width: 38px;
   height: 46px;
@@ -341,6 +345,26 @@
 .dsh-fc-railBtn img { width: 100%; height: 100%; object-fit: cover; }
 .dsh-fc-railBtn svg { width: 20px; height: 20px; }
 .dsh-fc-file { display: none; }
+/* Bottom-left attention dot on a folder card: amber means the folder waits for
+   an approval, a plan review or an answer; it pulses so it is noticed. */
+.dsh-fc-badge {
+  position: absolute;
+  left: 6px;
+  bottom: 6px;
+  z-index: 2;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--dsw-alias-state-warn-primary);
+  box-shadow: 0 0 0 2px var(--dsw-alias-bg-layer-1);
+  pointer-events: none;
+}
+.dsh-fc-card.has-image .dsh-fc-badge { bottom: 27px; }
+.dsh-fc-badge.is-pending { animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite; }
+@keyframes dsh-fc-badge-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.35); opacity: 0.72; }
+}
 .dsh-fc-search {
   flex: 1;
   min-width: 0;
@@ -536,6 +560,7 @@
   .dsh-fc-card, .dsh-fc-tools, .dsh-fc-thumb { transition: none; }
   .dsh-fc-panel, .dsh-fc-scrollRegion { animation: none; }
   .dsh-fc-ripple { display: none; }
+  .dsh-fc-badge.is-pending { animation: none; }
 }
 `;
 

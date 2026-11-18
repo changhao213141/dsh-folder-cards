@@ -30,6 +30,31 @@
       return summary.running === true;
     }
 
+    /** Status lookup that tolerates a missing or unreadable status map. */
+    function sessionStatusOf(statuses, sessionId) {
+      try {
+        if (statuses && typeof statuses.get === 'function') return statuses.get(sessionId) || null;
+      } catch (error) {
+        /* treat an unreadable map as no status */
+      }
+      return null;
+    }
+
+    /**
+     * What one Session wants from the user: `pending` when it waits for an
+     * approval, a plan review or an answer, `done` when a run finished and was
+     * never looked at. Mirrors the shipped sidebar's row semantics.
+     * @returns 'pending' | 'done' | null
+     */
+    function sessionAttention(statuses, sessionId) {
+      const status = sessionStatusOf(statuses, sessionId);
+      if (!status) return null;
+      const kind = status.pendingInteraction && status.pendingInteraction.kind;
+      if (kind === 'approval' || kind === 'plan-review' || kind === 'question') return 'pending';
+      if (status.completionUnread === true) return 'done';
+      return null;
+    }
+
     function timeLabel(updatedAt, now, t) {
       if (!Number.isFinite(updatedAt) || updatedAt <= 0) return '';
       const minutes = Math.floor(Math.max(0, now - updatedAt) / 60000);
