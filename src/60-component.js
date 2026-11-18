@@ -1,0 +1,1019 @@
+/**
+ * The sidebar region: card grid, session panel, search, archived trailer, view options and the plugin-local menu.
+ *
+ * This file is a fragment of the single client bundle. build.mjs concatenates
+ * the sections in name order inside the factory closure, so declarations are
+ * shared across files and no import statements are needed.
+ */
+    /* ---------- component ---------- */
+
+    function FolderCards(props) {
+      const api = props && typeof props.api === 'object' && props.api !== null ? props.api : {};
+      const translate = useCallback((key, params) => {
+        try {
+          if (typeof props.t === 'function') {
+            const value = props.t(key, params);
+            if (typeof value === 'string' && value !== '') return value;
+          }
+          const value = typeof api.t === 'function' ? api.t(key) : key;
+          if (typeof value !== 'string' || value === '') return key;
+          if (!params) return value;
+          return value.replace(/\{(\w+)\}/g, (match, name) => name in params ? String(params[name]) : match);
+        } catch (error) {
+          return key;
+        }
+      }, [api, props.t]);
+      const t = translate;
+
+      const wide = props.wide !== false;
+      const useWorkspaces = typeof props.useWorkspaces === 'function' ? props.useWorkspaces : () => EMPTY_WORKSPACES;
+      const useSessions = typeof props.useSessions === 'function' ? props.useSessions : () => EMPTY_SESSIONS;
+      const useSessionStatus = typeof props.useSessionStatus === 'function' ? props.useSessionStatus : () => null;
+
+      /* Slot-provided hook: registers this region's own scroller with the
+         sidebar's wheel hand-off, so a gesture that reaches this scroller's
+         end keeps moving the sidebar viewport (and vice versa). */
+      const useSectionScroller = typeof props.useSectionScroller === 'function' ? props.useSectionScroller : null;
+      const sectionScroller = useSectionScroller === null ? null : useSectionScroller();
+      const bindScroller = sectionScroller && typeof sectionScroller.bindScrollerRef === 'function'
+        ? sectionScroller.bindScrollerRef
+        : null;
+
+      const workspaceState = useWorkspaces(state => state) || EMPTY_WORKSPACES;
+      const sessionState = useSessions(state => state) || EMPTY_SESSIONS;
+      const statuses = useSessionStatus(state => state) || null;
+
+      const [openId, setOpenId] = useState(() => readPrefs().lastOpenId);
+      const [images, setImages] = useState(readImages);
+      const [busy, setBusy] = useState(false);
+      const [notice, setNotice] = useState('');
+      const [now, setNow] = useState(() => Date.now());
+      const [query, setQuery] = useState('');
+      const [searchOpen, setSearchOpen] = useState(false);
+      const [remoteSearch, setRemoteSearch] = useState({ query: '', status: 'idle', items: [] });
+      const [showArchived, setShowArchived] = useState(false);
+      const [sort, setSort] = useState(() => readPrefs().sort);
+      const [viewOpen, setViewOpen] = useState(false);
+      const [fallbackMenu, setFallbackMenu] = useState(null);
+      const [renaming, setRenaming] = useState(null);
+      const viewMenuRef = useRef(null);
+      const viewButtonRef = useRef(null);
+      const fallbackRef = useRef(null);
+      const renamePending = useRef(null);
+      const fileRef = useRef(null);
+      const searchInputRef = useRef(null);
+      const targetRef = useRef(null);
+      const backRef = useRef(null);
+      const cardRefs = useRef(new Map());
+      const rootRef = useRef(null);
+      const [availHeight, setAvailHeight] = useState(null);
+
+      /* The shell's scrollArea scrolls the navigation away before the section
+         scrolls, which would carry this region's header along and hide the
+         top cards behind it. Sizing the region so the outer viewport never
+         overflows keeps the whole sidebar fixed and leaves only the card
+         area scrollable.
+
+         The size is closed-loop: measure how much the outer viewport
+         currently overflows, subtract exactly that from the region, and the
+         outer settles at zero overflow regardless of how the shell is built. */
+      const measureAvail = useCallback(() => {
+        const element = rootRef.current;
+        const area = element && element.parentElement;
+        if (!element || !area) return;
+        let scroller = area.parentElement;
+        while (scroller && scroller !== document.body) {
+          const overflowY = window.getComputedStyle(scroller).overflowY;
+          if (overflowY === 'auto' || overflowY === 'scroll') break;
+          scroller = scroller.parentElement;
+        }
+        if (!scroller || scroller === document.body) return;
+        const height = element.getBoundingClientRect().height;
+        if (!(height > 0)) return;
+        const available = scroller.clientHeight;
+        const overflow = scroller.scrollHeight - available;
+        let next = height;
+        if (overflow > 1) {
+          /* Shrink by the measured overflow plus a pixel of slack. */
+          next = height - overflow - 2;
+        } else {
+          /* The shell changed above the region (a panel row came or went):
+             reclaim the leftover space, with a dead band against oscillation. */
+          const leftover = available - scroller.scrollHeight;
+          if (leftover > 8) next = height + leftover - 4;
+        }
+        next = Math.max(120, Math.round(next));
+        if (Math.abs(next - Math.round(height)) <= 1) return;
+        setAvailHeight(next);
+      }, []);
+
+      const resetAvail = useCallback(() => {
+        setAvailHeight(previous => previous === null ? previous : null);
+        if (typeof window.requestAnimationFrame === 'function') {
+          window.requestAnimationFrame(() => measureAvail());
+        } else {
+          setTimeout(measureAvail, 0);
+        }
+      }, [measureAvail]);
+
+      useEffect(() => {
+        if (!wide) {
+          setAvailHeight(previous => previous === null ? previous : null);
+          return undefined;
+        }
+        measureAvail();
+        const onResize = () => resetAvail();
+        window.addEventListener('resize', onResize);
+        return () => window.removeEventListener('resize', onResize);
+      }, [wide, measureAvail, resetAvail]);
+
+      /* Content and shell rows change between renders; keep correcting. */
+      useEffect(() => {
+        if (wide) measureAvail();
+      });
+      const lastOpened = useRef(null);
+
+      const items = Array.isArray(workspaceState.items) ? workspaceState.items : [];
+      const byId = sessionState.byId && typeof sessionState.byId === 'object' ? sessionState.byId : {};
+      const pinnedIds = Array.isArray(workspaceState.pinnedSessionIds) ? workspaceState.pinnedSessionIds : [];
+      const archivedIds = Array.isArray(workspaceState.archivedSessionIds) ? workspaceState.archivedSessionIds : [];
+      const sessionIds = Array.isArray(sessionState.ids) ? sessionState.ids : Object.keys(byId);
+
+      /* Sessions that belong to no workspace at all (a session created without
+         one, or left behind by a deleted workspace). The shipped browser keeps
+         them in an "ungrouped" bucket; so does this region, as its own card. */
+      const ungrouped = useMemo(() => {
+        const accounted = new Set();
+        for (const item of items) {
+          for (const id of Array.isArray(item.sessionIds) ? item.sessionIds : []) accounted.add(id);
+        }
+        const rows = [];
+        for (const id of sessionIds) {
+          if (accounted.has(id)) continue;
+          const summary = byId[id];
+          if (!summary) continue;
+          if (summary.origin === 'subagent') continue;
+          if (summary.blank === true) continue;
+          rows.push(id);
+        }
+        return rows;
+      }, [items, sessionIds, byId]);
+
+      const openWorkspace = useMemo(() => {
+        if (openId === null) return null;
+        if (openId === UNGROUPED_KEY) {
+          return ungrouped.length === 0 ? null : {
+            workspaceId: UNGROUPED_KEY,
+            title: t('ungrouped'),
+            path: '',
+            sessionIds: ungrouped,
+            ungrouped: true,
+          };
+        }
+        return items.find(item => item.workspaceId === openId) || null;
+      }, [openId, items, ungrouped, t]);
+
+      useEffect(() => {
+        if (openId !== null && openWorkspace === null) setOpenId(null);
+      }, [openId, openWorkspace]);
+
+      /* Clear a stale notice and collapse the archived trailer on level changes. */
+      useEffect(() => {
+        setNotice('');
+        setShowArchived(false);
+        setFallbackMenu(null);
+      }, [openId]);
+
+      /* Remember the view choice and the folder to reopen after a reload. */
+      useEffect(() => {
+        writePrefs({ sort, lastOpenId: openId });
+      }, [sort, openId]);
+
+      /* Dismiss plugin-local popovers on an outside press. */
+      useEffect(() => {
+        if (!viewOpen && fallbackMenu === null) return undefined;
+        const onDown = event => {
+          const target = event.target;
+          const inMenu = viewMenuRef.current && viewMenuRef.current.contains(target);
+          const inButton = viewButtonRef.current && viewButtonRef.current.contains(target);
+          const inFallback = fallbackRef.current && fallbackRef.current.contains(target);
+          if (!inMenu && !inButton && !inFallback) {
+            setViewOpen(false);
+            setFallbackMenu(null);
+          }
+        };
+        document.addEventListener('pointerdown', onDown, true);
+        return () => document.removeEventListener('pointerdown', onDown, true);
+      }, [viewOpen, fallbackMenu]);
+
+      /* Debounced content search against the Host index, cancelled on change. */
+      useEffect(() => {
+        const text = query.trim();
+        if (text === '') {
+          setRemoteSearch(previous => (
+            previous.status === 'idle' && previous.items.length === 0 ? previous : { query: '', status: 'idle', items: [] }
+          ));
+          return undefined;
+        }
+        let cancelled = false;
+        const controller = typeof AbortController === 'function' ? new AbortController() : null;
+        const timer = setTimeout(async () => {
+          setRemoteSearch({ query: text, status: 'loading', items: [] });
+          try {
+            const items = await api.searchSessions(text, controller ? controller.signal : undefined);
+            if (cancelled) return;
+            setRemoteSearch({ query: text, status: 'ready', items: Array.isArray(items) ? items : [] });
+          } catch (error) {
+            if (cancelled) return;
+            setRemoteSearch({ query: text, status: 'error', items: [] });
+          }
+        }, 250);
+        return () => {
+          cancelled = true;
+          clearTimeout(timer);
+          if (controller) controller.abort();
+        };
+      }, [query, api]);
+
+      /* Put the caret in the search field as soon as it opens. */
+      useEffect(() => {
+        if (!searchOpen) return;
+        const input = searchInputRef.current;
+        if (input) input.focus();
+      }, [searchOpen]);
+
+      /* Keep "刚刚 / 5 分钟" fresh while the sidebar idles. */
+      useEffect(() => {
+        const timer = setInterval(() => setNow(Date.now()), 60000);
+        return () => clearInterval(timer);
+      }, []);
+
+      /* Move focus with the user: into the session panel, then back to the
+         card that opened it. */
+      useEffect(() => {
+        if (openId !== null) {
+          if (backRef.current) backRef.current.focus();
+          return;
+        }
+        const previous = lastOpened.current;
+        lastOpened.current = null;
+        if (previous === null) return;
+        const card = cardRefs.current.get(previous);
+        if (card) card.focus();
+      }, [openId]);
+
+      const currentSessionId = useMemo(() => {
+        for (const id of sessionIds) {
+          const summary = byId[id];
+          if (summary && summary.retainedBy && (summary.retainedBy.mainView || 0) > 0) return id;
+        }
+        return null;
+      }, [sessionIds, byId]);
+
+      const sessions = useMemo(() => {
+        if (openWorkspace === null) return [];
+        const pinned = new Set(pinnedIds);
+        const seen = new Set();
+        const rows = [];
+        const memberIds = Array.isArray(openWorkspace.sessionIds) ? openWorkspace.sessionIds : [];
+        for (const id of memberIds) {
+          if (seen.has(id)) continue;
+          seen.add(id);
+          const summary = byId[id];
+          if (!summary) continue;
+          if (summary.origin === 'subagent') continue;
+          if (summary.blank === true) continue;
+          /* Archived Sessions are not openable and the shipped sidebar hides
+             them by default; a dead row here would only confuse. */
+          if (archivedIds.includes(id)) continue;
+          const title = typeof summary.title === 'string' && summary.title.trim() !== ''
+            ? summary.title.trim()
+            : t('untitled');
+          rows.push({
+            id,
+            title,
+            pinned: pinned.has(id),
+            running: isRunning(statuses, summary),
+            updatedAt: Number(summary.updatedAt) || 0,
+            current: id === currentSessionId,
+          });
+        }
+        rows.sort((left, right) =>
+          (Number(right.pinned) - Number(left.pinned)) || (right.updatedAt - left.updatedAt));
+        return rows;
+      }, [openWorkspace, byId, pinnedIds, archivedIds, currentSessionId, statuses, t]);
+
+      /* Archived Sessions of the open folder stay reachable through the trailer
+         instead of vanishing from the region. */
+      const archivedSessions = useMemo(() => {
+        if (openWorkspace === null) return [];
+        const rows = [];
+        for (const id of Array.isArray(openWorkspace.sessionIds) ? openWorkspace.sessionIds : []) {
+          const summary = byId[id];
+          if (!summary) continue;
+          if (summary.origin === 'subagent') continue;
+          if (!archivedIds.includes(id)) continue;
+          rows.push({
+            id,
+            title: typeof summary.title === 'string' && summary.title.trim() !== '' ? summary.title.trim() : t('untitled'),
+            updatedAt: Number(summary.updatedAt) || 0,
+          });
+        }
+        rows.sort((left, right) => right.updatedAt - left.updatedAt);
+        return rows;
+      }, [openWorkspace, byId, archivedIds, t]);
+
+      const workspaceNameOf = useCallback(sessionId => {
+        for (const item of items) {
+          if (Array.isArray(item.sessionIds) && item.sessionIds.indexOf(sessionId) >= 0) return workspaceTitle(item, t);
+        }
+        return t('ungrouped');
+      }, [items, t]);
+
+      /* One flat result list: matching folders first, then Session titles, then
+         Host content hits that the titles did not already cover. */
+      const searchResults = useMemo(() => {
+        const text = query.trim().toLowerCase();
+        if (text === '') return [];
+        const rows = [];
+        const seen = new Set();
+        for (const item of items) {
+          const title = workspaceTitle(item, t);
+          const path = typeof item.path === 'string' ? item.path : '';
+          if (title.toLowerCase().indexOf(text) >= 0 || path.toLowerCase().indexOf(text) >= 0) {
+            rows.push({ key: 'w:' + item.workspaceId, type: 'workspace', id: item.workspaceId, title, meta: path || t('workspaces') });
+          }
+        }
+        for (const id of sessionIds) {
+          const summary = byId[id];
+          if (!summary) continue;
+          if (summary.origin === 'subagent') continue;
+          if (summary.blank === true) continue;
+          const title = typeof summary.title === 'string' ? summary.title.trim() : '';
+          if (title === '' || title.toLowerCase().indexOf(text) < 0) continue;
+          seen.add(id);
+          rows.push({
+            key: 's:' + id,
+            type: 'session',
+            id,
+            title,
+            meta: workspaceNameOf(id),
+            archived: archivedIds.includes(id),
+          });
+        }
+        if (remoteSearch.status === 'ready' && remoteSearch.query === query.trim()) {
+          for (const hit of remoteSearch.items) {
+            if (seen.has(hit.sessionId)) continue;
+            seen.add(hit.sessionId);
+            const summary = byId[hit.sessionId];
+            rows.push({
+              key: 'r:' + hit.sessionId,
+              type: 'session',
+              id: hit.sessionId,
+              title: (summary && typeof summary.title === 'string' && summary.title.trim() !== '')
+                ? summary.title.trim()
+                : t('untitled'),
+              meta: typeof hit.snippet === 'string' && hit.snippet.trim() !== ''
+                ? hit.snippet.trim()
+                : workspaceNameOf(hit.sessionId),
+              archived: archivedIds.includes(hit.sessionId),
+            });
+          }
+        }
+        return rows.slice(0, 40);
+      }, [query, items, sessionIds, byId, remoteSearch, archivedIds, workspaceNameOf, t]);
+
+      const openSession = useCallback((sessionId) => {
+        try {
+          if (typeof api.open === 'function') api.open(sessionId);
+        } catch (error) {
+          console.warn('[folder-cards] open session failed', error);
+        }
+      }, [api]);
+
+      const startSession = useCallback((workspaceId) => {
+        try {
+          if (typeof api.startSession === 'function') api.startSession(workspaceId);
+        } catch (error) {
+          console.warn('[folder-cards] start session failed', error);
+        }
+      }, [api]);
+
+      /* Native menu first; when the shell's session menu is unavailable this
+         plugin's own popover takes over so the actions never become dead. */
+      const openSessionMenu = useCallback((sessionId, displayTitle, x, y) => {
+        let available = true;
+        try {
+          available = typeof api.sessionMenuAvailable === 'function' ? api.sessionMenuAvailable() : false;
+        } catch (error) {
+          available = false;
+        }
+        if (available) {
+          try {
+            if (typeof api.openSessionMenu === 'function') api.openSessionMenu(sessionId, displayTitle, x, y);
+            return;
+          } catch (error) {
+            console.warn('[folder-cards] native session menu failed, using fallback', error);
+          }
+        }
+        const element = rootRef.current;
+        if (!element) return;
+        const rect = element.getBoundingClientRect();
+        setFallbackMenu({
+          id: sessionId,
+          title: displayTitle,
+          x: Math.max(4, Math.min(Math.max(4, rect.width - 150), x - rect.left)),
+          y: Math.max(4, Math.min(Math.max(4, rect.height - 170), y - rect.top)),
+        });
+      }, [api]);
+
+      const beginRename = useCallback((sessionId, title) => {
+        renamePending.current = { id: sessionId, value: title };
+        setFallbackMenu(null);
+        setRenaming({ id: sessionId, value: title });
+      }, []);
+
+      const commitRename = useCallback(async () => {
+        const pending = renamePending.current;
+        renamePending.current = null;
+        setRenaming(null);
+        if (!pending) return;
+        const value = pending.value.trim();
+        if (value === '') return;
+        try {
+          if (typeof api.renameSession === 'function') await api.renameSession(pending.id, value);
+        } catch (error) {
+          console.warn('[folder-cards] rename failed', error);
+          setNotice(t('renameFailed'));
+        }
+      }, [api, t]);
+
+      const forkSession = useCallback(async sessionId => {
+        setFallbackMenu(null);
+        try {
+          if (typeof api.forkSession === 'function') await api.forkSession(sessionId);
+        } catch (error) {
+          console.warn('[folder-cards] fork failed', error);
+          setNotice(t('forkFailed'));
+        }
+      }, [api, t]);
+
+      const copySessionId = useCallback(sessionId => {
+        setFallbackMenu(null);
+        try {
+          if (typeof api.copySessionId === 'function') api.copySessionId(sessionId);
+        } catch (error) {
+          console.warn('[folder-cards] copy failed', error);
+        }
+      }, [api]);
+
+      const toggleArchive = useCallback(async (sessionId, isArchived) => {
+        setFallbackMenu(null);
+        try {
+          if (isArchived) await api.unarchiveSession(sessionId);
+          else if (typeof api.archiveSession === 'function') await api.archiveSession(sessionId);
+        } catch (error) {
+          console.warn('[folder-cards] archive failed', error);
+          setNotice(t('archiveFailed'));
+        }
+      }, [api, t]);
+
+      const openWorkspaceMenu = useCallback((workspaceId, displayTitle, x, y) => {
+        try {
+          if (typeof api.openWorkspaceMenu === 'function') api.openWorkspaceMenu(workspaceId, displayTitle, x, y);
+        } catch (error) {
+          console.warn('[folder-cards] workspace menu failed', error);
+        }
+      }, [api]);
+
+      const restoreSession = useCallback(sessionId => {
+        try {
+          if (typeof api.unarchiveSession === 'function') api.unarchiveSession(sessionId);
+        } catch (error) {
+          console.warn('[folder-cards] unarchive failed', error);
+        }
+      }, [api]);
+
+      const addWorkspace = useCallback(async () => {
+        if (busy) return;
+        setBusy(true);
+        setNotice('');
+        try {
+          const path = typeof api.pickDirectory === 'function' ? await api.pickDirectory() : null;
+          if (!path) return;
+          if (typeof api.createWorkspace === 'function') await api.createWorkspace(path);
+        } catch (error) {
+          console.warn('[folder-cards] create workspace failed', error);
+          setNotice(String(error && error.message || '').indexOf('directory-picker') >= 0
+            ? t('pickerUnavailable')
+            : t('addFailed'));
+        } finally {
+          setBusy(false);
+        }
+      }, [api, busy, t]);
+
+      const pickImage = useCallback((workspaceId) => {
+        targetRef.current = workspaceId;
+        const input = fileRef.current;
+        if (!input) return;
+        input.value = '';
+        input.click();
+      }, []);
+
+      const resetImage = useCallback((workspaceId) => {
+        if (!(workspaceId in images)) return;
+        const next = { ...images };
+        delete next[workspaceId];
+        const failure = writeImages(next);
+        if (failure !== '') {
+          setNotice(t(failure === 'tooLarge' ? 'imageTooLarge' : 'storageFailed'));
+          return;
+        }
+        setImages(next);
+      }, [images, t]);
+
+      const onPickFile = useCallback(async (event) => {
+        const input = event.target;
+        const file = input.files && input.files[0];
+        const workspaceId = targetRef.current;
+        targetRef.current = null;
+        if (!file || !workspaceId) return;
+        setBusy(true);
+        setNotice('');
+        try {
+          const dataUrl = await shrinkImage(file, MAX_EDGE);
+          const next = { ...images, [workspaceId]: dataUrl };
+          const failure = writeImages(next);
+          if (failure !== '') {
+            setNotice(t(failure === 'tooLarge' ? 'imageTooLarge' : 'storageFailed'));
+            return;
+          }
+          setImages(next);
+        } catch (error) {
+          console.warn('[folder-cards] image rejected', error);
+          setNotice(t('imageFailed'));
+        } finally {
+          setBusy(false);
+          input.value = '';
+        }
+      }, [images, t]);
+
+      const enterFolder = useCallback((workspaceId) => {
+        lastOpened.current = workspaceId;
+        setOpenId(workspaceId);
+      }, []);
+
+      /* A droplet ripple marks the level change: it expands on the way in and
+         collapses back into the point on the way out; the other level
+         surfaces while the rings are still moving. */
+      const [pulse, setPulse] = useState(null);
+      const pulseTimers = useRef([]);
+
+      useEffect(() => () => {
+        for (const timer of pulseTimers.current) clearTimeout(timer);
+        pulseTimers.current = [];
+      }, []);
+
+      const startPulse = useCallback((clientX, clientY, mode) => {
+        const element = rootRef.current;
+        if (!element) return false;
+        if (typeof window.matchMedia === 'function'
+          && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return false;
+        const rect = element.getBoundingClientRect();
+        if (!(rect.width > 0) || !(rect.height > 0)) return false;
+        for (const timer of pulseTimers.current) clearTimeout(timer);
+        pulseTimers.current = [];
+        setPulse({
+          key: Date.now() + '-' + Math.random(),
+          x: Math.max(0, Math.min(rect.width, clientX - rect.left)),
+          y: Math.max(0, Math.min(rect.height, clientY - rect.top)),
+          mode: mode === 'out' ? 'out' : 'in',
+        });
+        pulseTimers.current.push(setTimeout(() => setPulse(null), 1000));
+        return true;
+      }, []);
+
+      const openCard = useCallback((workspaceId, clientX, clientY) => {
+        const animated = startPulse(clientX, clientY, 'in');
+        lastOpened.current = workspaceId;
+        if (!animated) {
+          setOpenId(workspaceId);
+          return;
+        }
+        pulseTimers.current.push(setTimeout(() => setOpenId(workspaceId), 150));
+      }, [startPulse]);
+
+      const leaveFolder = useCallback((clientX, clientY) => {
+        const animated = startPulse(clientX, clientY, 'out');
+        if (!animated) {
+          setOpenId(null);
+          return;
+        }
+        pulseTimers.current.push(setTimeout(() => setOpenId(null), 160));
+      }, [startPulse]);
+
+      const pickSearchResult = useCallback(row => {
+        if (row.type === 'workspace') {
+          enterFolder(row.id);
+        } else if (!row.archived) {
+          openSession(row.id);
+        } else {
+          return;
+        }
+        setQuery('');
+        setSearchOpen(false);
+      }, [enterFolder, openSession]);
+
+      const styleNode = h('style', null, CSS);
+      const statusText = notice !== '' ? notice : (busy ? t('processing') : '');
+      const loading = items.length === 0
+        && (workspaceState.phase === 'pending' || workspaceState.state === 'loading');
+      const failed = items.length === 0 && workspaceState.state === 'error';
+
+      /* Cards in the chosen order: registry order, or most recently used folder
+         first (a folder without sessions keeps the lowest rank). */
+      const cardSpecs = useMemo(() => {
+        const lastActivity = item => {
+          let latest = 0;
+          for (const id of Array.isArray(item.sessionIds) ? item.sessionIds : []) {
+            const summary = byId[id];
+            if (!summary) continue;
+            const stamp = Number(summary.updatedAt) || 0;
+            if (stamp > latest) latest = stamp;
+          }
+          return latest;
+        };
+        const specs = items.map(item => ({
+          id: item.workspaceId,
+          title: workspaceTitle(item, t),
+          image: images[item.workspaceId] || '',
+          lastActivity: lastActivity(item),
+        }));
+        if (sort === 'recent') specs.sort((left, right) => right.lastActivity - left.lastActivity);
+        if (ungrouped.length > 0) {
+          specs.push({ id: UNGROUPED_KEY, title: t('ungrouped'), image: images[UNGROUPED_KEY] || '', lastActivity: 0 });
+        }
+        return specs;
+      }, [items, images, sort, ungrouped, byId, t]);
+
+      if (!wide) {
+        return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
+          styleNode,
+          statusText === '' ? null : h('div', { className: 'dsh-fc-notice', role: 'status' }, statusText),
+          cardSpecs.map(spec => h('button', {
+            key: spec.id,
+            type: 'button',
+            className: 'dsh-fc-railBtn',
+            title: spec.title,
+            'aria-label': spec.title,
+            onClick: () => {
+              enterFolder(spec.id);
+              if (typeof props.expandSidebar === 'function') props.expandSidebar();
+            },
+          }, spec.image ? h('img', { src: spec.image, alt: '', draggable: false }) : folderGlyph())),
+        );
+      }
+
+      const cardNodes = cardSpecs.map(spec => {
+        const hasImage = spec.image !== '';
+        return h('div', { key: spec.id, className: 'dsh-fc-cardWrap' },
+          h('button', {
+            type: 'button',
+            ref: element => {
+              if (element) cardRefs.current.set(spec.id, element);
+              else cardRefs.current.delete(spec.id);
+            },
+            className: 'dsh-fc-card' + (hasImage ? ' has-image' : ''),
+            title: spec.title,
+            'aria-label': spec.title,
+            onClick: event => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = event.clientX > 0 ? event.clientX : rect.left + rect.width / 2;
+              const y = event.clientY > 0 ? event.clientY : rect.top + rect.height / 2;
+              openCard(spec.id, x, y);
+            },
+            onContextMenu: event => {
+              if (spec.id === UNGROUPED_KEY) return;
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              openWorkspaceMenu(spec.id, spec.title,
+                event.clientX > 0 ? event.clientX : rect.left,
+                event.clientY > 0 ? event.clientY : rect.bottom);
+            },
+          },
+          hasImage
+            ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
+            : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
+          h('span', { className: 'dsh-fc-name' }, spec.title),
+          ),
+          h('div', { className: 'dsh-fc-tools' },
+            h('button', {
+              type: 'button',
+              className: 'dsh-fc-tool',
+              title: t('changeImage'),
+              'aria-label': t('changeImage'),
+              onClick: () => pickImage(spec.id),
+            }, iconImage()),
+            hasImage
+              ? h('button', {
+                  type: 'button',
+                  className: 'dsh-fc-tool',
+                  title: t('resetImage'),
+                  'aria-label': t('resetImage'),
+                  onClick: () => resetImage(spec.id),
+                }, iconReset())
+              : null,
+          ),
+        );
+      });
+
+      const gridNode = failed
+        ? h('div', { className: 'dsh-fc-empty', role: 'status' }, t('loadFailed'))
+        : loading
+          ? h('div', { className: 'dsh-fc-empty', role: 'status' }, t('loading'))
+          : items.length === 0
+            ? h('div', { className: 'dsh-fc-empty' }, t('noFolders'))
+            : h('div', { className: 'dsh-fc-grid' }, cardNodes);
+
+      const searchNode = h('div', { className: 'dsh-fc-results' },
+        searchResults.length === 0
+          ? h('div', { className: 'dsh-fc-empty', role: 'status' },
+              remoteSearch.query === query.trim() && remoteSearch.status === 'loading' ? t('searching') : t('noMatch'))
+          : searchResults.map(row => h('button', {
+              key: row.key,
+              type: 'button',
+              className: 'dsh-fc-result'
+                + (row.type === 'workspace' ? ' is-workspace' : '')
+                + (row.archived ? ' is-archived' : ''),
+              title: row.title,
+              disabled: row.type === 'session' && row.archived === true,
+              onClick: () => pickSearchResult(row),
+            },
+            h('span', { className: 'dsh-fc-resultTitle' }, row.title),
+            h('span', { className: 'dsh-fc-resultMeta' }, row.meta),
+            )),
+      );
+
+      const viewNode = viewOpen ? [
+        h('div', {
+          key: 'backdrop',
+          className: 'dsh-fc-backdrop',
+          onPointerDown: () => setViewOpen(false),
+        }),
+        h('div', {
+          key: 'menu',
+          className: 'dsh-fc-viewMenu',
+          ref: viewMenuRef,
+          role: 'dialog',
+          'aria-label': t('viewOptions'),
+        },
+        h('div', { className: 'dsh-fc-viewLabel' }, t('sortBy')),
+        h('div', { className: 'dsh-fc-seg' },
+          h('button', {
+            type: 'button',
+            className: 'dsh-fc-segBtn' + (sort === 'manual' ? ' is-active' : ''),
+            onClick: () => setSort('manual'),
+          }, t('sortManual')),
+          h('button', {
+            type: 'button',
+            className: 'dsh-fc-segBtn' + (sort === 'recent' ? ' is-active' : ''),
+            onClick: () => setSort('recent'),
+          }, t('sortRecent')),
+        ),
+        ),
+      ] : null;
+
+      const fallbackNode = fallbackMenu === null ? null : [
+        h('div', {
+          key: 'backdrop',
+          className: 'dsh-fc-backdrop',
+          onPointerDown: () => setFallbackMenu(null),
+        }),
+        h('div', {
+          key: 'menu',
+          className: 'dsh-fc-fallback',
+          ref: fallbackRef,
+          role: 'menu',
+          style: { left: fallbackMenu.x + 'px', top: fallbackMenu.y + 'px' },
+        },
+        h('button', { type: 'button', role: 'menuitem', className: 'dsh-fc-fallbackItem', onClick: () => beginRename(fallbackMenu.id, fallbackMenu.title) }, t('rename')),
+        h('button', { type: 'button', role: 'menuitem', className: 'dsh-fc-fallbackItem', onClick: () => forkSession(fallbackMenu.id) }, t('fork')),
+        h('button', { type: 'button', role: 'menuitem', className: 'dsh-fc-fallbackItem', onClick: () => copySessionId(fallbackMenu.id) }, t('copyId')),
+        h('button', {
+          type: 'button',
+          role: 'menuitem',
+          className: 'dsh-fc-fallbackItem',
+          onClick: () => toggleArchive(fallbackMenu.id, archivedIds.includes(fallbackMenu.id)),
+        }, t(archivedIds.includes(fallbackMenu.id) ? 'unarchive' : 'archive')),
+        ),
+      ];
+
+      const sessionRow = row => {
+        if (renaming !== null && renaming.id === row.id) {
+          return h('div', { key: row.id, className: 'dsh-fc-rowWrap' },
+            h('input', {
+              className: 'dsh-fc-rename',
+              value: renaming.value,
+              autoFocus: true,
+              'aria-label': t('rename'),
+              onChange: event => {
+                const value = event.target.value;
+                renamePending.current = { id: row.id, value };
+                setRenaming({ id: row.id, value });
+              },
+              onKeyDown: event => {
+                if (event.key === 'Enter') {
+                  event.preventDefault();
+                  commitRename();
+                } else if (event.key === 'Escape') {
+                  event.preventDefault();
+                  renamePending.current = null;
+                  setRenaming(null);
+                }
+              },
+              onBlur: () => commitRename(),
+            }),
+          );
+        }
+        return h('div', { key: row.id, className: 'dsh-fc-rowWrap' },
+          h('button', {
+            type: 'button',
+            className: 'dsh-fc-row' + (row.current ? ' is-current' : ''),
+            title: row.title,
+            'aria-label': row.running ? `${row.title} · ${t('running')}` : row.title,
+            onClick: () => openSession(row.id),
+            onContextMenu: event => {
+              event.preventDefault();
+              const rect = event.currentTarget.getBoundingClientRect();
+              openSessionMenu(row.id, row.title,
+                event.clientX > 0 ? event.clientX : rect.left + 12,
+                event.clientY > 0 ? event.clientY : rect.bottom);
+            },
+          },
+          h('span', {
+            className: 'dsh-fc-dot' + (row.running ? ' is-running' : ''),
+            title: row.running ? t('running') : null,
+            'aria-hidden': true,
+          }),
+          h('span', { className: 'dsh-fc-rowTitle' }, row.title),
+          h('span', { className: 'dsh-fc-rowTime' }, timeLabel(row.updatedAt, now, t)),
+          ),
+          h('button', {
+            type: 'button',
+            className: 'dsh-fc-rowMenuBtn',
+            title: t('sessionMenu'),
+            'aria-label': t('sessionMenu'),
+            onClick: event => {
+              event.stopPropagation();
+              const rect = event.currentTarget.getBoundingClientRect();
+              openSessionMenu(row.id, row.title, rect.left, rect.bottom);
+            },
+          }, iconMore()),
+        );
+      };
+
+      const archivedNode = openWorkspace === null || archivedSessions.length === 0 ? null
+        : [
+            h('button', {
+              key: 'archived-toggle',
+              type: 'button',
+              className: 'dsh-fc-row dsh-fc-archivedToggle',
+              onClick: () => setShowArchived(value => !value),
+            }, h('span', { className: 'dsh-fc-rowTitle' },
+              t(showArchived ? 'hideArchived' : 'showArchived', { n: archivedSessions.length }))),
+            showArchived
+              ? archivedSessions.map(row => h('div', { key: 'archived:' + row.id, className: 'dsh-fc-rowWrap' },
+                  h('button', {
+                    type: 'button',
+                    className: 'dsh-fc-row is-archived',
+                    title: row.title,
+                    onClick: () => restoreSession(row.id),
+                  },
+                  h('span', { className: 'dsh-fc-rowTitle' }, row.title),
+                  h('span', { className: 'dsh-fc-rowTime' }, t('restore')),
+                  )))
+              : null,
+          ];
+
+      const sessionPanel = openWorkspace === null ? null : h('div', { className: 'dsh-fc-panel' },
+        h('div', { className: 'dsh-fc-panelHead' },
+          h('button', {
+            type: 'button',
+            ref: backRef,
+            className: 'dsh-fc-back',
+            title: t('back'),
+            onClick: event => {
+              const rect = event.currentTarget.getBoundingClientRect();
+              const x = event.clientX > 0 ? event.clientX : rect.left + rect.width / 2;
+              const y = event.clientY > 0 ? event.clientY : rect.top + rect.height / 2;
+              leaveFolder(x, y);
+            },
+          }, iconChevronLeft(), h('span', null, t('back'))),
+          h('span', {
+            className: 'dsh-fc-panelTitle',
+            title: workspaceTitle(openWorkspace, t),
+          }, workspaceTitle(openWorkspace, t)),
+        ),
+        h(ScrollRegion, { label: workspaceTitle(openWorkspace, t), bindScroller },
+          h('div', { className: 'dsh-fc-rows' },
+            openWorkspace.ungrouped
+              ? null
+              : h('button', {
+                  type: 'button',
+                  className: 'dsh-fc-row is-new',
+                  onClick: () => startSession(openWorkspace.workspaceId),
+                }, h('span', { className: 'dsh-fc-rowTitle' }, t('newSession'))),
+            sessions.length === 0
+              ? h('div', { className: 'dsh-fc-empty' }, t('empty'))
+              : sessions.map(sessionRow),
+            archivedNode,
+          ),
+        ),
+      );
+
+      return h('div', {
+        className: 'dsh-fc-root is-wide',
+        ref: rootRef,
+        style: availHeight === null ? undefined : { height: availHeight + 'px' },
+      },
+        styleNode,
+        h('div', { className: 'dsh-fc-head' },
+          searchOpen
+            ? h('input', {
+                ref: searchInputRef,
+                className: 'dsh-fc-search',
+                type: 'text',
+                value: query,
+                placeholder: t('searchPlaceholder'),
+                'aria-label': t('search'),
+                spellCheck: false,
+                onChange: event => setQuery(event.target.value),
+                onKeyDown: event => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    setQuery('');
+                    setSearchOpen(false);
+                  }
+                },
+              })
+            : h('span', { className: 'dsh-fc-headTitle' }, t('workspaces')),
+          searchOpen
+            ? h('button', {
+                type: 'button',
+                className: 'dsh-fc-iconbtn',
+                title: t('clearSearch'),
+                'aria-label': t('clearSearch'),
+                onClick: () => { setQuery(''); setSearchOpen(false); },
+              }, iconClose())
+            : h('button', {
+                type: 'button',
+                className: 'dsh-fc-iconbtn',
+                title: t('search'),
+                'aria-label': t('search'),
+                onClick: () => { setSearchOpen(true); setQuery(''); },
+              }, iconSearch()),
+          h('button', {
+            type: 'button',
+            ref: viewButtonRef,
+            className: 'dsh-fc-iconbtn',
+            title: t('viewOptions'),
+            'aria-label': t('viewOptions'),
+            'aria-expanded': viewOpen ? 'true' : 'false',
+            onClick: () => setViewOpen(value => !value),
+          }, iconSliders()),
+          h('button', {
+            type: 'button',
+            className: 'dsh-fc-iconbtn',
+            title: t('addWorkspace'),
+            'aria-label': t('addWorkspace'),
+            disabled: busy,
+            onClick: addWorkspace,
+          }, iconPlus()),
+        ),
+        viewNode,
+        statusText === '' ? null : h('div', { className: 'dsh-fc-notice', role: 'status' }, statusText),
+        h('div', { className: 'dsh-fc-body' },
+          query.trim() !== ''
+            ? h(ScrollRegion, { label: t('search'), bindScroller }, searchNode)
+            : sessionPanel !== null
+              ? sessionPanel
+              : h(ScrollRegion, { label: t('workspaces'), bindScroller }, gridNode),
+        ),
+        fallbackNode,
+        pulse === null ? null : h('div', { className: 'dsh-fc-pulse', 'aria-hidden': true },
+          h('span', { key: pulse.key + ':core', className: 'dsh-fc-ripple is-core' + (pulse.mode === 'out' ? ' is-reverse' : ''), style: { left: pulse.x + 'px', top: pulse.y + 'px' } }),
+          h('span', { key: pulse.key + ':ring-1', className: 'dsh-fc-ripple' + (pulse.mode === 'out' ? ' is-reverse' : ''), style: { left: pulse.x + 'px', top: pulse.y + 'px' } }),
+          h('span', { key: pulse.key + ':ring-2', className: 'dsh-fc-ripple is-late' + (pulse.mode === 'out' ? ' is-reverse' : ''), style: { left: pulse.x + 'px', top: pulse.y + 'px' } }),
+        ),
+        h('input', {
+          ref: fileRef,
+          type: 'file',
+          accept: 'image/*',
+          className: 'dsh-fc-file',
+          tabIndex: -1,
+          'aria-hidden': true,
+          onChange: onPickFile,
+        }),
+      );
+    }
+

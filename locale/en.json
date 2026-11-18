@@ -1,0 +1,7 @@
+{
+  "meta": {
+    "title": "Folder cards sidebar",
+    "description": "Replaces the sidebar workspace region with a grid of portrait folder cards: a folder glyph plus the folder name by default, an inserted image when you pick one, and a droplet transition into that folder's session list with a back button and a collapsing ripple on the way out. Includes title and content search, card sorting (folder order / recent activity), the native session menu with a built-in fallback (rename, pin, fork, copy id, archive), and an expandable archived section.",
+    "detail": "docs/DETAIL.md"
+  }
+}
