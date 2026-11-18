@@ -6,7 +6,7 @@
 
 1. 打开 <https://github.com/signup>，填邮箱、密码、用户名（用户名会成为仓库地址的一部分，例如 `github.com/yourname/dsh-folder-cards`）。
 2. 收邮件点验证链接；建议顺手开启两步验证（Settings → Password and authentication）。
-3. 记下用户名，后面所有 `<你的用户名>` 都要替换成它。
+3. 记下用户名；本文档里的仓库地址已按 `changhao213141` 填好，换成别的账号时记得全局替换。
 
 ## 1. 建仓库并上传
 
@@ -24,7 +24,7 @@ git init
 git add .
 git commit -m "feat: initial release"
 git branch -M main
-git remote add origin https://github.com/<你的用户名>/dsh-folder-cards.git
+git remote add origin https://github.com/changhao213141/dsh-folder-cards.git
 git push -u origin main
 ```
 
@@ -37,9 +37,9 @@ git push -u origin main
 - **package.json 补 repository**（建好仓库后加，然后 `npm run build` 不需要重建，但提交一次）：
 
 ```json
-"repository": { "type": "git", "url": "git+https://github.com/<你的用户名>/dsh-folder-cards.git" },
-"homepage": "https://github.com/<你的用户名>/dsh-folder-cards#readme",
-"bugs": { "url": "https://github.com/<你的用户名>/dsh-folder-cards/issues" }
+"repository": { "type": "git", "url": "git+https://github.com/changhao213141/dsh-folder-cards.git" },
+"homepage": "https://github.com/changhao213141/dsh-folder-cards#readme",
+"bugs": { "url": "https://github.com/changhao213141/dsh-folder-cards/issues" }
 ```
 
 ## 3. 发布到 npm（可选，但推荐）

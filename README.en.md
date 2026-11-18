@@ -27,7 +27,7 @@ Requires DSH `0.2.2-rc.x` (see `engines.dsh`) and a Web profile.
 
 ```sh
 # from GitHub
-dsh plugin --profile desktop add github:<your-user>/dsh-folder-cards
+dsh plugin --profile desktop add github:changhao213141/dsh-folder-cards
 
 # from npm (once published)
 dsh plugin --profile desktop add dsh-folder-cards

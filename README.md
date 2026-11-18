@@ -49,7 +49,7 @@ DSH 默认侧栏把所有工作区摊成一列文字。项目一多，滚动条�
 **从 GitHub（推荐，尚未发布 npm 时）**
 
 ```sh
-dsh plugin --profile desktop add github:<你的用户名>/dsh-folder-cards
+dsh plugin --profile desktop add github:changhao213141/dsh-folder-cards
 ```
 
 **从 npm（发布之后）**
