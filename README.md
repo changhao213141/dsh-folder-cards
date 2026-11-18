@@ -1,4 +1,4 @@
-﻿# dsh-folder-cards
+# dsh-folder-cards
 
 把 **DeepSeek Harness（DSH）** 左侧的「工作区」区换成**竖版文件夹卡片**：一个文件夹一张卡，点开就以水波过渡进入这个文件夹里的会话列表，返回时水波收回。
 
@@ -65,6 +65,8 @@ dsh plugin --profile desktop add dsh-folder-cards
 把本目录作为插件安装（插件管理器支持本地目录），或在「设置 → 插件」里添加该绝对路径。
 
 安装后刷新页面（`Ctrl+F5`）即可看到；客户端插件代码改动需要整页重载才生效。
+
+> **市场收录状态**：目前还没进 dshmarket 的目录，用上面的 GitHub 方式安装即可。收录后安装命令会统一成 `dsh plugin add dsh-folder-cards`；也可以先在 **Plugins → Discover → Index sources** 里加 `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json`，那是 dshmarket 目录转成的标准索引。
 
 ## 兼容性
 

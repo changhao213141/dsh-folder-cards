@@ -35,6 +35,8 @@ dsh plugin --profile desktop add dsh-folder-cards
 
 Then hard-refresh the page (`Ctrl+F5`).
 
+> **Marketplace status**: not in the dshmarket catalog yet — install from GitHub as above. Once listed, `dsh plugin add dsh-folder-cards` becomes available; you can also add `https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json` under **Plugins → Discover → Index sources**, which is the same catalog as a standard index.
+
 ## Compatibility
 
 `engines.dsh: ">=0.2.2-rc.1 <0.3.0"`, developed against `0.2.2-rc.3`. It claims the `sidebar.workspaces` seat with priority `-1` over the shipped `0` registration; nothing official is written, so disabling the plugin restores the native list.

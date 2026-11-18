@@ -62,13 +62,57 @@ npm version patch   # 或 minor / major
 npm publish --access public
 ```
 
-## 4. 出现在插件中心
+## 4. 进插件市场
 
-DSH 内置市场（插件管理器里的 Discover / 市场页）和社区目录站抓的是**插件索引**，索引通常来自 GitHub 仓库与 npm：
+「插件市场」其实是三条独立的路，规则各不相同。
 
-- 先把上面第 2 步的 **topic `dsh-plugin`** 和 README 做好——这是最有效的第一步。
-- 社区目录站（例如 dshbase、dshplugin.online）一般有提交入口或可以直接提 issue，说明「新插件 + 仓库地址 + 一句话简介」；具体收录规则以站方为准，本仓库不做承诺。
-- 内置市场的索引插件（如 `dshbase-catalog`）装了之后可以直接说「帮我装 dsh-folder-cards」，由 agent 在索引里找到并安装；索引是否覆盖本仓库取决于该索引的抓取范围。
+### 4.1 dshmarket（内置可视化市场，收录 = 一个文件 PR）
+
+它的目录**只**来自 curated 仓库 [awesome-dsh-plugin](https://github.com/awesome-dsh-plugin/awesome-dsh-plugin)，不会自动扫描 GitHub。收录方式是往那个仓库提一个文件 PR。
+
+官方 `contributing.md` 的硬性条件：
+
+1. `package.json` 声明 `dsh.bundle`（本仓库已有）且根目录有 `cordis.patch.yml`（已有）——只有 `dsh.client` 会被拒；
+2. **仓库创建满 1 天**（自动校验。本仓库建于 2026-11-18，约 11-19 23:12 之后才达标）；
+3. 仓库带 `dsh-plugin` topic；
+4. 描述如实、无营销词（会被对照代码检查）；
+5. 一个 PR 最多 3 条。
+
+PR 步骤：
+
+1. 打开 <https://github.com/awesome-dsh-plugin/awesome-dsh-plugin>；
+2. Add file → Create new file，路径与文件名必须是
+   `data/plugins/changhao213141__dsh-folder-cards.yml`；
+3. 粘贴 [`docs/market/changhao213141__dsh-folder-cards.yml`](market/changhao213141__dsh-folder-cards.yml) 的内容（分类 `ui`）；
+4. 提交时选择 “Create a new branch and start a pull request”，PR 标题写
+   `Add dsh-folder-cards`，正文可以照抄本节末尾的模板。
+
+合并后站点与 dshmarket 通常一天内自动跟进。npm 是否发布**不影响收录**，条目里不要手写 `npm:` 字段（会被拒）。
+
+### 4.2 官方 Discover（`@deepseek-ai/dsh-plugin-market`）
+
+默认没有任何索引源，需要用户自己加。dshmarket 的目录已被转成 format-1 索引：
+`https://cdn.jsdelivr.net/npm/dsh-plugin-catalog/index.json`
+
+4.1 合并之后，任何人在 **Plugins → Discover → Index sources** 里加这个地址就能搜到本插件。README 里已经写了这句提示。
+
+### 4.3 社区目录站
+
+- **dshbase**：数据源是 GitHub `dsh-plugin` topic + 合并目录，打上 topic 后会被抓；也可以走表单
+  <https://github.com/ylwl1997/dshbase/issues/new?template=plugin-submission.yml>。
+- **dshplugin.online / dshplugin.store** 等：以站点说明为准，一般支持按仓库地址提 issue 或提交页。
+
+### PR 正文模板
+
+```markdown
+Adds dsh-folder-cards to the registry.
+
+- Repo: https://github.com/changhao213141/dsh-folder-cards (MIT)
+- Claims the `sidebar.workspaces` seat (priority -1); writes no official state, disabling restores the native list
+- Requires DSH `>=0.2.2-rc.1 <0.3.0` (`engines.dsh`), tested on 0.2.2-rc.3
+- No install-time build: `client.js` is committed; sources live in `src/` with a dependency-free `build.mjs`
+- Browser-local only: card artwork and view preferences are stored in `localStorage`
+```
 
 ## 5. 维护建议
 
