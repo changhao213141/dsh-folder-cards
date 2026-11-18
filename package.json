@@ -44,6 +44,14 @@
     "dsh": ">=0.2.2-rc.1 <0.3.0"
   },
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/changhao213141/dsh-folder-cards.git"
+  },
+  "homepage": "https://github.com/changhao213141/dsh-folder-cards#readme",
+  "bugs": {
+    "url": "https://github.com/changhao213141/dsh-folder-cards/issues"
+  },
   "keywords": [
     "dsh",
     "dsh-plugin",
