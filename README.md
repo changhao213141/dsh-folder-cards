@@ -1,10 +1,12 @@
-# dsh-folder-cards
+﻿# dsh-folder-cards
 
 把 **DeepSeek Harness（DSH）** 左侧的「工作区」区换成**竖版文件夹卡片**：一个文件夹一张卡，点开就以水波过渡进入这个文件夹里的会话列表，返回时水波收回。
 
 ![布局示意（非截图）](docs/layout.svg)
+![真实截图：工作区栏的卡片布局](docs/screenshots/screenshot-1.png)
 
-> 上面是布局示意图，不是运行截图。真实截图欢迎使用后补到 `docs/screenshots/`，提 PR 我会合并。
+
+> 上为布局示意（手绘 SVG），下为 DSH 里的实际效果。真实截图欢迎使用后补到 `docs/screenshots/`，提 PR 我会合并。
 
 ## 为什么做这个
 
