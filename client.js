@@ -67,6 +67,8 @@ window.__ModuleLoader__.load({
       sessionMenu: '会话操作',
       needsYou: '需要你处理',
       finishedUnread: '有新的运行结果',
+      otherFoldersPending: '{n} 个待处理',
+      otherFoldersDone: '{n} 个已完成',
       viewOptions: '视图选项',
       sortBy: '排序',
       sortManual: '默认顺序',
@@ -117,6 +119,8 @@ window.__ModuleLoader__.load({
       sessionMenu: 'Conversation actions',
       needsYou: 'Needs your approval or answer',
       finishedUnread: 'New run finished',
+      otherFoldersPending: '{n} pending',
+      otherFoldersDone: '{n} done',
       viewOptions: 'View options',
       sortBy: 'Sort',
       sortManual: 'Folder order',
@@ -504,6 +508,34 @@ window.__ModuleLoader__.load({
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.35); opacity: 0.72; }
 }
+/* Header reminder while a folder is open: the other folders' counts stay in
+   sight, and clicking it goes back to the grid. */
+.dsh-fc-reminder {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  flex: none;
+}
+.dsh-fc-reminder:hover {
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-fc-reminderItem { display: inline-flex; align-items: center; gap: 3px; line-height: 1; }
+.dsh-fc-reminderDot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.dsh-fc-reminderDot.is-done { background: var(--dsw-alias-state-success-primary); }
+.dsh-fc-reminderDot.is-pending {
+  background: var(--dsw-alias-state-warn-primary);
+  animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite;
+}
 .dsh-fc-search {
   flex: 1;
   min-width: 0;
@@ -700,6 +732,7 @@ window.__ModuleLoader__.load({
   .dsh-fc-panel, .dsh-fc-scrollRegion { animation: none; }
   .dsh-fc-ripple { display: none; }
   .dsh-fc-badge.is-pending { animation: none; }
+  .dsh-fc-reminderDot.is-pending { animation: none; }
 }
 `;
 
@@ -1812,6 +1845,52 @@ window.__ModuleLoader__.load({
         return spec.title;
       };
 
+      /* While a folder is open its list replaces the grid, so the other
+         folders' dots are out of sight. This reminder keeps them visible in
+         the header and jumps back to the grid when clicked. */
+      const reminders = useMemo(() => {
+        const pending = [];
+        const done = [];
+        for (const spec of cardSpecs) {
+          if (spec.attention === null || spec.id === openId) continue;
+          if (spec.attention === 'pending') pending.push(spec.title);
+          else done.push(spec.title);
+        }
+        return { pending, done };
+      }, [cardSpecs, openId]);
+
+      const reminderTitle = [
+        reminders.pending.length === 0 ? '' : `${t('otherFoldersPending', { n: reminders.pending.length })}：${reminders.pending.join(' · ')}`,
+        reminders.done.length === 0 ? '' : `${t('otherFoldersDone', { n: reminders.done.length })}：${reminders.done.join(' · ')}`,
+      ].filter(Boolean).join('  ');
+
+      const reminderNode = openId === null || searchOpen || (reminders.pending.length === 0 && reminders.done.length === 0)
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'dsh-fc-reminder',
+            title: reminderTitle,
+            'aria-label': reminderTitle,
+            onClick: () => {
+              if (query.trim() !== '') {
+                setQuery('');
+                setSearchOpen(false);
+              }
+              setOpenId(null);
+            },
+          },
+          reminders.pending.length > 0
+            ? h('span', { key: 'pending', className: 'dsh-fc-reminderItem' },
+                h('span', { className: 'dsh-fc-reminderDot is-pending' }),
+                String(reminders.pending.length))
+            : null,
+          reminders.done.length > 0
+            ? h('span', { key: 'done', className: 'dsh-fc-reminderItem' },
+                h('span', { className: 'dsh-fc-reminderDot is-done' }),
+                String(reminders.done.length))
+            : null,
+          );
+
       const attentionBadge = spec => (spec.attention === null
         ? null
         : h('span', {
@@ -2125,6 +2204,7 @@ window.__ModuleLoader__.load({
                 },
               })
             : h('span', { className: 'dsh-fc-headTitle' }, t('workspaces')),
+          reminderNode,
           searchOpen
             ? h('button', {
                 type: 'button',

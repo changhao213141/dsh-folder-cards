@@ -367,6 +367,34 @@
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.35); opacity: 0.72; }
 }
+/* Header reminder while a folder is open: the other folders' counts stay in
+   sight, and clicking it goes back to the grid. */
+.dsh-fc-reminder {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  height: 20px;
+  padding: 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 6px;
+  background: var(--dsw-alias-bg-layer-1);
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  flex: none;
+}
+.dsh-fc-reminder:hover {
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-fc-reminderItem { display: inline-flex; align-items: center; gap: 3px; line-height: 1; }
+.dsh-fc-reminderDot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+.dsh-fc-reminderDot.is-done { background: var(--dsw-alias-state-success-primary); }
+.dsh-fc-reminderDot.is-pending {
+  background: var(--dsw-alias-state-warn-primary);
+  animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite;
+}
 .dsh-fc-search {
   flex: 1;
   min-width: 0;
@@ -563,6 +591,7 @@
   .dsh-fc-panel, .dsh-fc-scrollRegion { animation: none; }
   .dsh-fc-ripple { display: none; }
   .dsh-fc-badge.is-pending { animation: none; }
+  .dsh-fc-reminderDot.is-pending { animation: none; }
 }
 `;
 

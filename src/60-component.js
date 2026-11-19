@@ -688,6 +688,52 @@
         return spec.title;
       };
 
+      /* While a folder is open its list replaces the grid, so the other
+         folders' dots are out of sight. This reminder keeps them visible in
+         the header and jumps back to the grid when clicked. */
+      const reminders = useMemo(() => {
+        const pending = [];
+        const done = [];
+        for (const spec of cardSpecs) {
+          if (spec.attention === null || spec.id === openId) continue;
+          if (spec.attention === 'pending') pending.push(spec.title);
+          else done.push(spec.title);
+        }
+        return { pending, done };
+      }, [cardSpecs, openId]);
+
+      const reminderTitle = [
+        reminders.pending.length === 0 ? '' : `${t('otherFoldersPending', { n: reminders.pending.length })}：${reminders.pending.join(' · ')}`,
+        reminders.done.length === 0 ? '' : `${t('otherFoldersDone', { n: reminders.done.length })}：${reminders.done.join(' · ')}`,
+      ].filter(Boolean).join('  ');
+
+      const reminderNode = openId === null || searchOpen || (reminders.pending.length === 0 && reminders.done.length === 0)
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'dsh-fc-reminder',
+            title: reminderTitle,
+            'aria-label': reminderTitle,
+            onClick: () => {
+              if (query.trim() !== '') {
+                setQuery('');
+                setSearchOpen(false);
+              }
+              setOpenId(null);
+            },
+          },
+          reminders.pending.length > 0
+            ? h('span', { key: 'pending', className: 'dsh-fc-reminderItem' },
+                h('span', { className: 'dsh-fc-reminderDot is-pending' }),
+                String(reminders.pending.length))
+            : null,
+          reminders.done.length > 0
+            ? h('span', { key: 'done', className: 'dsh-fc-reminderItem' },
+                h('span', { className: 'dsh-fc-reminderDot is-done' }),
+                String(reminders.done.length))
+            : null,
+          );
+
       const attentionBadge = spec => (spec.attention === null
         ? null
         : h('span', {
@@ -1001,6 +1047,7 @@
                 },
               })
             : h('span', { className: 'dsh-fc-headTitle' }, t('workspaces')),
+          reminderNode,
           searchOpen
             ? h('button', {
                 type: 'button',
