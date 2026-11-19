@@ -279,6 +279,18 @@
         if (history && typeof history.setCurrent === 'function') history.setCurrent(currentSessionId);
       }, [history, currentSessionId]);
 
+      const [historyTarget, setHistoryTarget] = useState(null);
+      useEffect(() => {
+        if (!history || typeof history.subscribe !== 'function') return undefined;
+        const read = () => {
+          const snapshot = typeof history.getSnapshot === 'function' ? history.getSnapshot() : null;
+          const stack = snapshot && Array.isArray(snapshot.stack) ? snapshot.stack : [];
+          setHistoryTarget(stack.length > 0 ? stack[stack.length - 1] : null);
+        };
+        read();
+        return history.subscribe(read);
+      }, [history]);
+
       const sessions = useMemo(() => {
         if (openWorkspace === null) return [];
         const pinned = new Set(pinnedIds);
@@ -751,6 +763,35 @@
             'aria-hidden': true,
           }));
 
+      /* Same way back, mirrored into the sidebar header so it is reachable
+         without looking at the composer. */
+      const historyTitle = historyTarget === null || typeof api.sessionTitle !== 'function'
+        ? ''
+        : (() => {
+            try {
+              return api.sessionTitle(historyTarget);
+            } catch (error) {
+              return '';
+            }
+          })();
+      const historyLabel = t('backToConversation');
+      const historyNode = historyTarget === null
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'dsh-fc-iconbtn',
+            title: historyTitle === '' ? historyLabel : `${historyLabel} · ${historyTitle}`,
+            'aria-label': historyTitle === '' ? historyLabel : `${historyLabel} · ${historyTitle}`,
+            onClick: () => {
+              try {
+                const target = typeof history.take === 'function' ? history.take() : null;
+                if (target !== null && typeof api.open === 'function') api.open(target);
+              } catch (error) {
+                console.warn('[folder-cards] go back failed', error);
+              }
+            },
+          }, historyGlyph());
+
       if (!wide) {
         return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
           styleNode,
@@ -1058,6 +1099,7 @@
               })
             : h('span', { className: 'dsh-fc-headTitle' }, t('workspaces')),
           reminderNode,
+          historyNode,
           searchOpen
             ? h('button', {
                 type: 'button',

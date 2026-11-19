@@ -127,18 +127,27 @@
 
       const stack = Array.isArray(snapshot.stack) ? snapshot.stack : [];
       if (stack.length === 0) return null;
-      const label = t('backToConversation');
+      const target = stack[stack.length - 1];
+      let title = '';
+      try {
+        title = typeof api.sessionTitle === 'function' ? api.sessionTitle(target) : '';
+      } catch (error) {
+        title = '';
+      }
+      const fallback = t('backToConversation');
+      const label = typeof title === 'string' && title !== '' ? title : fallback;
+      const tooltip = typeof title === 'string' && title !== '' ? `${fallback} · ${title}` : fallback;
       return h(React.Fragment, null,
         h('style', null, HISTORY_CSS),
         h('button', {
           type: 'button',
           className: 'dsh-fc-historyBtn',
-          title: label,
-          'aria-label': label,
+          title: tooltip,
+          'aria-label': tooltip,
           onClick: () => {
             try {
-              const target = typeof history.take === 'function' ? history.take() : null;
-              if (target !== null && typeof api.open === 'function') api.open(target);
+              const id = typeof history.take === 'function' ? history.take() : null;
+              if (id !== null && typeof api.open === 'function') api.open(id);
             } catch (error) {
               console.warn('[folder-cards] go back failed', error);
             }

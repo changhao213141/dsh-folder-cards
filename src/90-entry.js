@@ -120,6 +120,18 @@
               /* Clipboard access can be denied; the action stays harmless. */
             }
           },
+          sessionTitle(sessionId) {
+            try {
+              const sessions = ctx.get('sessions');
+              const list = sessions && sessions.list && typeof sessions.list.getSnapshot === 'function'
+                ? sessions.list.getSnapshot()
+                : null;
+              const summary = list && list.byId ? list.byId[sessionId] : null;
+              return summary && typeof summary.title === 'string' ? summary.title.trim() : '';
+            } catch (error) {
+              return '';
+            }
+          },
         };
 
         const history = createHistoryStore();

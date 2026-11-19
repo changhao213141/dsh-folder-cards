@@ -1293,18 +1293,27 @@ window.__ModuleLoader__.load({
 
       const stack = Array.isArray(snapshot.stack) ? snapshot.stack : [];
       if (stack.length === 0) return null;
-      const label = t('backToConversation');
+      const target = stack[stack.length - 1];
+      let title = '';
+      try {
+        title = typeof api.sessionTitle === 'function' ? api.sessionTitle(target) : '';
+      } catch (error) {
+        title = '';
+      }
+      const fallback = t('backToConversation');
+      const label = typeof title === 'string' && title !== '' ? title : fallback;
+      const tooltip = typeof title === 'string' && title !== '' ? `${fallback} · ${title}` : fallback;
       return h(React.Fragment, null,
         h('style', null, HISTORY_CSS),
         h('button', {
           type: 'button',
           className: 'dsh-fc-historyBtn',
-          title: label,
-          'aria-label': label,
+          title: tooltip,
+          'aria-label': tooltip,
           onClick: () => {
             try {
-              const target = typeof history.take === 'function' ? history.take() : null;
-              if (target !== null && typeof api.open === 'function') api.open(target);
+              const id = typeof history.take === 'function' ? history.take() : null;
+              if (id !== null && typeof api.open === 'function') api.open(id);
             } catch (error) {
               console.warn('[folder-cards] go back failed', error);
             }
@@ -1593,6 +1602,18 @@ window.__ModuleLoader__.load({
       useEffect(() => {
         if (history && typeof history.setCurrent === 'function') history.setCurrent(currentSessionId);
       }, [history, currentSessionId]);
+
+      const [historyTarget, setHistoryTarget] = useState(null);
+      useEffect(() => {
+        if (!history || typeof history.subscribe !== 'function') return undefined;
+        const read = () => {
+          const snapshot = typeof history.getSnapshot === 'function' ? history.getSnapshot() : null;
+          const stack = snapshot && Array.isArray(snapshot.stack) ? snapshot.stack : [];
+          setHistoryTarget(stack.length > 0 ? stack[stack.length - 1] : null);
+        };
+        read();
+        return history.subscribe(read);
+      }, [history]);
 
       const sessions = useMemo(() => {
         if (openWorkspace === null) return [];
@@ -2066,6 +2087,35 @@ window.__ModuleLoader__.load({
             'aria-hidden': true,
           }));
 
+      /* Same way back, mirrored into the sidebar header so it is reachable
+         without looking at the composer. */
+      const historyTitle = historyTarget === null || typeof api.sessionTitle !== 'function'
+        ? ''
+        : (() => {
+            try {
+              return api.sessionTitle(historyTarget);
+            } catch (error) {
+              return '';
+            }
+          })();
+      const historyLabel = t('backToConversation');
+      const historyNode = historyTarget === null
+        ? null
+        : h('button', {
+            type: 'button',
+            className: 'dsh-fc-iconbtn',
+            title: historyTitle === '' ? historyLabel : `${historyLabel} · ${historyTitle}`,
+            'aria-label': historyTitle === '' ? historyLabel : `${historyLabel} · ${historyTitle}`,
+            onClick: () => {
+              try {
+                const target = typeof history.take === 'function' ? history.take() : null;
+                if (target !== null && typeof api.open === 'function') api.open(target);
+              } catch (error) {
+                console.warn('[folder-cards] go back failed', error);
+              }
+            },
+          }, historyGlyph());
+
       if (!wide) {
         return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
           styleNode,
@@ -2373,6 +2423,7 @@ window.__ModuleLoader__.load({
               })
             : h('span', { className: 'dsh-fc-headTitle' }, t('workspaces')),
           reminderNode,
+          historyNode,
           searchOpen
             ? h('button', {
                 type: 'button',
@@ -2553,6 +2604,18 @@ window.__ModuleLoader__.load({
               }
             } catch (error) {
               /* Clipboard access can be denied; the action stays harmless. */
+            }
+          },
+          sessionTitle(sessionId) {
+            try {
+              const sessions = ctx.get('sessions');
+              const list = sessions && sessions.list && typeof sessions.list.getSnapshot === 'function'
+                ? sessions.list.getSnapshot()
+                : null;
+              const summary = list && list.byId ? list.byId[sessionId] : null;
+              return summary && typeof summary.title === 'string' ? summary.title.trim() : '';
+            } catch (error) {
+              return '';
             }
           },
         };
