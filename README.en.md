@@ -2,11 +2,19 @@
 
 Turn the **DeepSeek Harness (DSH)** sidebar's workspace region into **portrait folder cards**: one card per folder, and a droplet transition into that folder's conversations — with a reverse ripple when you go back.
 
-![Real screenshot: folder cards in the sidebar](docs/screenshots/screenshot-1.png)
+## Screens
 
-![Layout diagram (not a screenshot)](docs/layout.svg)
+**The card grid** — two 3:4 columns, the folder name under each card, and "insert image / reset" in the top-right corner on hover. The dot in the **bottom-left corner** is the attention state: amber means the folder has a conversation waiting for your approval or answer, green means a run finished and has not been opened yet.
 
-> Top: the plugin running in DSH. Bottom: a hand-drawn layout diagram. Add new screenshots under `docs/screenshots/` and list them in `screenshots.json` — PRs accepted.
+![Card grid: two columns of portrait folder cards with amber and green status dots](docs/screenshots/grid-status-dots.png)
+
+**Inside a folder** — back button on top, then "New session" and this folder's conversations (title plus relative time). The `●1` on the header row is a **cross-folder reminder**: while you work in another area it still shows how many pending / finished-unread items the other folders have.
+
+![Inside a folder: back button, conversation rows and the cross-folder reminder](docs/screenshots/folder-inside.png)
+
+**Artwork is yours** — every card takes a cover image (the covers below are user-inserted); replace or reset from the card's top-right corner.
+
+![Cards with inserted cover images](docs/screenshots/screenshot-1.png)
 
 ## What it does
 
