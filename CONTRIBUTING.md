@@ -25,7 +25,7 @@
 npm run build
 npm test
 # 3. 安装到你的 Web profile（或在插件管理器里添加本目录）
-dsh plugin --profile dsh add link:$PWD
+dsh plugin --profile <profile> add link:$PWD
 # 4. 刷新页面
 ```
 
