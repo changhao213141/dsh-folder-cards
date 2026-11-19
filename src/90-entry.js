@@ -122,11 +122,23 @@
           },
         };
 
+        const history = createHistoryStore();
+
         ctx.effect(() => ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
           name: 'sidebar.workspaces',
           priority: -1,
           locale: NS,
-          inject: () => ({ api }),
+          inject: () => ({ api, history }),
         }, FolderCards)), 'folder-cards: sidebar section');
+
+        /* The way back sits in the composer tool row, next to the controls the
+           user already looks at while typing. */
+        ctx.effect(() => ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+          name: 'conversation.input.left',
+          id: 'folder-cards-history',
+          order: 10,
+          locale: NS,
+          inject: () => ({ api, history }),
+        }, BackToConversation)), 'folder-cards: composer history chip');
       },
     };

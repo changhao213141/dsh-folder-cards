@@ -270,6 +270,15 @@
         return null;
       }, [sessionIds, byId]);
 
+      /* The composer chip needs the conversation the main view shows, and the
+         conversation being left the moment a row is opened. */
+      const currentIdRef = useRef(null);
+      currentIdRef.current = currentSessionId;
+      const history = props.history && typeof props.history === 'object' ? props.history : null;
+      useEffect(() => {
+        if (history && typeof history.setCurrent === 'function') history.setCurrent(currentSessionId);
+      }, [history, currentSessionId]);
+
       const sessions = useMemo(() => {
         if (openWorkspace === null) return [];
         const pinned = new Set(pinnedIds);
@@ -386,11 +395,12 @@
 
       const openSession = useCallback((sessionId) => {
         try {
+          if (history && typeof history.push === 'function') history.push(currentIdRef.current);
           if (typeof api.open === 'function') api.open(sessionId);
         } catch (error) {
           console.warn('[folder-cards] open session failed', error);
         }
-      }, [api]);
+      }, [api, history]);
 
       const startSession = useCallback((workspaceId) => {
         try {

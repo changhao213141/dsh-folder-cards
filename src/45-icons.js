@@ -70,6 +70,13 @@
       );
     }
 
+    function historyGlyph() {
+      return h('svg', { viewBox: '0 0 16 16', width: 13, height: 13, 'aria-hidden': true, focusable: false },
+        h('path', { d: 'M6.4 3.6 3 7l3.4 3.4', stroke: 'currentColor', strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+        h('path', { d: 'M3.3 7H9a3.6 3.6 0 0 1 3.6 3.6V13', stroke: 'currentColor', strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round' }),
+      );
+    }
+
     function iconSliders() {
       return h('svg', { viewBox: '0 0 16 16', width: 14, height: 14, 'aria-hidden': true, focusable: false },
         h('path', { d: 'M2.5 5h11M2.5 11h11', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }),

@@ -69,6 +69,7 @@ window.__ModuleLoader__.load({
       finishedUnread: '有新的运行结果',
       otherFoldersPending: '{n} 个待处理',
       otherFoldersDone: '{n} 个已完成',
+      backToConversation: '返回上一个会话',
       viewOptions: '视图选项',
       sortBy: '排序',
       sortManual: '默认顺序',
@@ -121,6 +122,7 @@ window.__ModuleLoader__.load({
       finishedUnread: 'New run finished',
       otherFoldersPending: '{n} pending',
       otherFoldersDone: '{n} done',
+      backToConversation: 'Back to previous conversation',
       viewOptions: 'View options',
       sortBy: 'Sort',
       sortManual: 'Folder order',
@@ -984,6 +986,13 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function historyGlyph() {
+      return h('svg', { viewBox: '0 0 16 16', width: 13, height: 13, 'aria-hidden': true, focusable: false },
+        h('path', { d: 'M6.4 3.6 3 7l3.4 3.4', stroke: 'currentColor', strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
+        h('path', { d: 'M3.3 7H9a3.6 3.6 0 0 1 3.6 3.6V13', stroke: 'currentColor', strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round' }),
+      );
+    }
+
     function iconSliders() {
       return h('svg', { viewBox: '0 0 16 16', width: 14, height: 14, 'aria-hidden': true, focusable: false },
         h('path', { d: 'M2.5 5h11M2.5 11h11', stroke: 'currentColor', strokeWidth: 1.3, strokeLinecap: 'round' }),
@@ -1152,6 +1161,155 @@ window.__ModuleLoader__.load({
                 onKeyDown: onThumbKeyDown,
               }))
           : null,
+      );
+    }
+
+/**
+ * Cross-slot conversation history: the sidebar records the conversation it
+ * leaves behind, and a small chip in the composer tool row offers the way
+ * back. Both halves live in this module, so one in-memory store is enough.
+ *
+ * This file is a fragment of the single client bundle. build.mjs concatenates
+ * the sections in name order inside the factory closure, so declarations are
+ * shared across files and no import statements are needed.
+ */
+
+    /* ---------- conversation history ---------- */
+
+    /** Bounded last-in-first-out stack of conversation ids this plugin opened. */
+    function createHistoryStore() {
+      const stack = [];
+      const listeners = new Set();
+      let current = null;
+      const LIMIT = 20;
+      const emit = () => {
+        for (const listener of listeners) {
+          try {
+            listener();
+          } catch (error) {
+            /* a broken listener must not break the others */
+          }
+        }
+      };
+      const trim = () => {
+        while (stack.length > LIMIT) stack.shift();
+      };
+      return {
+        subscribe(listener) {
+          listeners.add(listener);
+          return () => { listeners.delete(listener); };
+        },
+        getSnapshot() {
+          return { current, stack: stack.slice() };
+        },
+        /** Remember the conversation the main view is showing. */
+        setCurrent(sessionId) {
+          if (current === sessionId) return;
+          current = sessionId;
+          emit();
+        },
+        /** Record the conversation being left; the current one is never stacked. */
+        push(sessionId) {
+          if (typeof sessionId !== 'string' || sessionId === '' || sessionId === current) return;
+          if (stack[stack.length - 1] === sessionId) return;
+          stack.push(sessionId);
+          trim();
+          emit();
+        },
+        /** Pop the way back and remember where we came from, so it toggles. */
+        take() {
+          const target = stack.pop();
+          if (target === undefined) return null;
+          if (current !== null) {
+            stack.push(current);
+            trim();
+          }
+          emit();
+          return target;
+        },
+      };
+    }
+
+    const HISTORY_CSS = `
+.dsh-fc-historyBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 24px;
+  padding: 0 8px 0 6px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+  flex: none;
+  max-width: 170px;
+}
+.dsh-fc-historyBtn:hover {
+  background: var(--dsw-alias-bg-layer-2);
+  border-color: var(--dsw-alias-border-l2);
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-fc-historyBtn:focus-visible {
+  border-color: var(--dsw-alias-brand-primary);
+  color: var(--dsw-alias-label-primary);
+}
+.dsh-fc-historyLabel {
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+`;
+
+    /**
+     * Way back to the conversation this plugin replaced last.
+     * @param props - `history` store plus the `api`/locale seats from this plugin.
+     */
+    function BackToConversation(props) {
+      const history = props.history;
+      const api = props.api && typeof props.api === 'object' ? props.api : {};
+      const t = key => {
+        try {
+          if (typeof props.t === 'function') {
+            const value = props.t(key);
+            if (typeof value === 'string' && value !== '') return value;
+          }
+          if (typeof api.t === 'function') return api.t(key);
+        } catch (error) {
+          /* fall back to the key */
+        }
+        return key;
+      };
+      const [snapshot, setSnapshot] = useState(() => (
+        history && typeof history.getSnapshot === 'function' ? history.getSnapshot() : { current: null, stack: [] }
+      ));
+      useEffect(() => {
+        if (!history || typeof history.subscribe !== 'function') return undefined;
+        return history.subscribe(() => setSnapshot(history.getSnapshot()));
+      }, [history]);
+
+      const stack = Array.isArray(snapshot.stack) ? snapshot.stack : [];
+      if (stack.length === 0) return null;
+      const label = t('backToConversation');
+      return h(React.Fragment, null,
+        h('style', null, HISTORY_CSS),
+        h('button', {
+          type: 'button',
+          className: 'dsh-fc-historyBtn',
+          title: label,
+          'aria-label': label,
+          onClick: () => {
+            try {
+              const target = typeof history.take === 'function' ? history.take() : null;
+              if (target !== null && typeof api.open === 'function') api.open(target);
+            } catch (error) {
+              console.warn('[folder-cards] go back failed', error);
+            }
+          },
+        }, historyGlyph(), h('span', { className: 'dsh-fc-historyLabel' }, label)),
       );
     }
 
@@ -1427,6 +1585,15 @@ window.__ModuleLoader__.load({
         return null;
       }, [sessionIds, byId]);
 
+      /* The composer chip needs the conversation the main view shows, and the
+         conversation being left the moment a row is opened. */
+      const currentIdRef = useRef(null);
+      currentIdRef.current = currentSessionId;
+      const history = props.history && typeof props.history === 'object' ? props.history : null;
+      useEffect(() => {
+        if (history && typeof history.setCurrent === 'function') history.setCurrent(currentSessionId);
+      }, [history, currentSessionId]);
+
       const sessions = useMemo(() => {
         if (openWorkspace === null) return [];
         const pinned = new Set(pinnedIds);
@@ -1543,11 +1710,12 @@ window.__ModuleLoader__.load({
 
       const openSession = useCallback((sessionId) => {
         try {
+          if (history && typeof history.push === 'function') history.push(currentIdRef.current);
           if (typeof api.open === 'function') api.open(sessionId);
         } catch (error) {
           console.warn('[folder-cards] open session failed', error);
         }
-      }, [api]);
+      }, [api, history]);
 
       const startSession = useCallback((workspaceId) => {
         try {
@@ -2389,12 +2557,24 @@ window.__ModuleLoader__.load({
           },
         };
 
+        const history = createHistoryStore();
+
         ctx.effect(() => ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
           name: 'sidebar.workspaces',
           priority: -1,
           locale: NS,
-          inject: () => ({ api }),
+          inject: () => ({ api, history }),
         }, FolderCards)), 'folder-cards: sidebar section');
+
+        /* The way back sits in the composer tool row, next to the controls the
+           user already looks at while typing. */
+        ctx.effect(() => ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+          name: 'conversation.input.left',
+          id: 'folder-cards-history',
+          order: 10,
+          locale: NS,
+          inject: () => ({ api, history }),
+        }, BackToConversation)), 'folder-cards: composer history chip');
       },
     };
   },
