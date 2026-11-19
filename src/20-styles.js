@@ -201,6 +201,51 @@
   background: var(--dsw-alias-bg-overlay);
   border-top: 1px solid var(--dsw-alias-border-l1);
 }
+/* A running folder turns its bottom line into "name · working here" and
+   scrolls it right to left, because the sentence is wider than the card. */
+.dsh-fc-name.is-marquee {
+  display: block;
+  overflow: hidden;
+  text-align: left;
+}
+.dsh-fc-nameTrack {
+  display: inline-flex;
+  gap: 18px;
+  white-space: nowrap;
+  animation: dsh-fc-marquee 9s linear infinite;
+  will-change: transform;
+}
+.dsh-fc-nameChunk { white-space: nowrap; }
+.dsh-fc-card:hover .dsh-fc-nameTrack { animation-play-state: paused; }
+@keyframes dsh-fc-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+/* "叮，完成了！" bubble over a card whose run just finished on screen. */
+.dsh-fc-done {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  z-index: 3;
+  padding: 2px 7px;
+  border: 1px solid var(--dsw-alias-state-success-primary);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-overlay);
+  color: var(--dsw-alias-state-success-primary);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: dsh-fc-done-pop 2.4s ease-out forwards;
+}
+.dsh-fc-card.has-image .dsh-fc-done { bottom: 52px; }
+@keyframes dsh-fc-done-pop {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.7); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1.06); }
+  22% { transform: translate(-50%, 0) scale(1); }
+  72% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(1); }
+}
 .dsh-fc-tools {
   position: absolute;
   top: 3px;
@@ -610,6 +655,8 @@
   .dsh-fc-badge.is-pending { animation: none; }
   .dsh-fc-reminderDot.is-pending { animation: none; }
   .dsh-fc-card.is-active, .dsh-fc-railBtn.is-active { animation: none; }
+  .dsh-fc-nameTrack { animation: none; }
+  .dsh-fc-done { animation: none; opacity: 1; }
 }
 `;
 

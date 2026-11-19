@@ -680,6 +680,21 @@
         return levels;
       }, [items, ungrouped, statuses]);
 
+      /* Folders with a conversation running right now: their bottom line says
+         what is happening instead of only the folder name. */
+      const runningFolders = useMemo(() => {
+        const running = new Set();
+        const note = (workspaceId, sessionId) => {
+          const status = sessionStatusOf(statuses, sessionId);
+          if (status && status.running === true) running.add(workspaceId);
+        };
+        for (const item of items) {
+          for (const id of Array.isArray(item.sessionIds) ? item.sessionIds : []) note(item.workspaceId, id);
+        }
+        for (const id of ungrouped) note(UNGROUPED_KEY, id);
+        return running;
+      }, [items, ungrouped, statuses]);
+
       /* Cards in the chosen order: registry order, or most recently used folder
          first (a folder without sessions keeps the lowest rank). */
       const cardSpecs = useMemo(() => {
@@ -698,6 +713,7 @@
           title: workspaceTitle(item, t),
           image: images[item.workspaceId] || '',
           attention: attention.get(item.workspaceId) || null,
+          running: runningFolders.has(item.workspaceId),
           active: item.workspaceId === activeWorkspaceId,
           lastActivity: lastActivity(item),
         }));
@@ -708,17 +724,18 @@
             title: t('ungrouped'),
             image: images[UNGROUPED_KEY] || '',
             attention: attention.get(UNGROUPED_KEY) || null,
+            running: runningFolders.has(UNGROUPED_KEY),
             active: activeWorkspaceId === UNGROUPED_KEY,
             lastActivity: 0,
           });
         }
         return specs;
-      }, [items, images, sort, ungrouped, byId, attention, activeWorkspaceId, t]);
+      }, [items, images, sort, ungrouped, byId, attention, runningFolders, activeWorkspaceId, t]);
 
       /** Accessible name that carries the card's attention state. */
       const cardLabel = spec => {
         const parts = [spec.title];
-        if (spec.active) parts.push(t('workingHere'));
+        if (spec.running || spec.active) parts.push(t('workingHere'));
         if (spec.attention === 'pending') parts.push(t('needsYou'));
         else if (spec.attention === 'done') parts.push(t('finishedUnread'));
         return parts.join(' · ');
@@ -769,6 +786,39 @@
                 String(reminders.done.length))
             : null,
           );
+
+      /* "叮，完成了！" — a run that finishes while the grid is on screen flashes
+         a bubble on its card, on top of the green dot. */
+      const [doneFlash, setDoneFlash] = useState(null);
+      const flashTimers = useRef([]);
+      const levelsRef = useRef(new Map());
+      const primedRef = useRef(false);
+      useEffect(() => () => {
+        for (const timer of flashTimers.current) clearTimeout(timer);
+        flashTimers.current = [];
+      }, []);
+      useEffect(() => {
+        const previous = levelsRef.current;
+        const next = new Map();
+        let flashId = null;
+        for (const spec of cardSpecs) {
+          if (spec.attention !== null) next.set(spec.id, spec.attention);
+          if (spec.attention === 'done' && previous.get(spec.id) !== 'done' && flashId === null
+            && openId === null && !searchOpen) {
+            flashId = spec.id;
+          }
+        }
+        const wasPrimed = primedRef.current;
+        levelsRef.current = next;
+        if (items.length > 0) primedRef.current = true;
+        /* The first pass only records what is already finished, without
+           celebrating runs that ended before the page was opened. */
+        if (!wasPrimed || flashId === null) return;
+        setDoneFlash({ id: flashId, key: Date.now() });
+        flashTimers.current.push(setTimeout(() => {
+          setDoneFlash(current => (current && current.id === flashId ? null : current));
+        }, 2600));
+      }, [cardSpecs, openId, searchOpen, items.length]);
 
       const attentionBadge = spec => (spec.attention === null
         ? null
@@ -855,8 +905,17 @@
           hasImage
             ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
             : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
-          h('span', { className: 'dsh-fc-name' }, spec.title),
+          spec.running
+            ? h('span', { className: 'dsh-fc-name is-marquee', 'aria-hidden': true },
+                h('span', { className: 'dsh-fc-nameTrack' },
+                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                ))
+            : h('span', { className: 'dsh-fc-name' }, spec.title),
           attentionBadge(spec),
+          doneFlash !== null && doneFlash.id === spec.id
+            ? h('span', { key: doneFlash.key, className: 'dsh-fc-done' }, t('dingDone'))
+            : null,
           ),
           h('div', { className: 'dsh-fc-tools' },
             h('button', {

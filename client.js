@@ -71,6 +71,7 @@ window.__ModuleLoader__.load({
       otherFoldersDone: '{n} 个已完成',
       backToConversation: '返回上一个会话',
       workingHere: '正在这里干活',
+      dingDone: '叮，完成了！',
       viewOptions: '视图选项',
       sortBy: '排序',
       sortManual: '默认顺序',
@@ -125,6 +126,7 @@ window.__ModuleLoader__.load({
       otherFoldersDone: '{n} done',
       backToConversation: 'Back to previous conversation',
       workingHere: 'Working here',
+      dingDone: 'Ding — done!',
       viewOptions: 'View options',
       sortBy: 'Sort',
       sortManual: 'Folder order',
@@ -345,6 +347,51 @@ window.__ModuleLoader__.load({
   padding: 3px 6px;
   background: var(--dsw-alias-bg-overlay);
   border-top: 1px solid var(--dsw-alias-border-l1);
+}
+/* A running folder turns its bottom line into "name · working here" and
+   scrolls it right to left, because the sentence is wider than the card. */
+.dsh-fc-name.is-marquee {
+  display: block;
+  overflow: hidden;
+  text-align: left;
+}
+.dsh-fc-nameTrack {
+  display: inline-flex;
+  gap: 18px;
+  white-space: nowrap;
+  animation: dsh-fc-marquee 9s linear infinite;
+  will-change: transform;
+}
+.dsh-fc-nameChunk { white-space: nowrap; }
+.dsh-fc-card:hover .dsh-fc-nameTrack { animation-play-state: paused; }
+@keyframes dsh-fc-marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+/* "叮，完成了！" bubble over a card whose run just finished on screen. */
+.dsh-fc-done {
+  position: absolute;
+  left: 50%;
+  bottom: 30px;
+  z-index: 3;
+  padding: 2px 7px;
+  border: 1px solid var(--dsw-alias-state-success-primary);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-overlay);
+  color: var(--dsw-alias-state-success-primary);
+  font-size: 10px;
+  line-height: 14px;
+  white-space: nowrap;
+  pointer-events: none;
+  animation: dsh-fc-done-pop 2.4s ease-out forwards;
+}
+.dsh-fc-card.has-image .dsh-fc-done { bottom: 52px; }
+@keyframes dsh-fc-done-pop {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(0.7); }
+  12% { opacity: 1; transform: translate(-50%, 0) scale(1.06); }
+  22% { transform: translate(-50%, 0) scale(1); }
+  72% { opacity: 1; }
+  100% { opacity: 0; transform: translate(-50%, -6px) scale(1); }
 }
 .dsh-fc-tools {
   position: absolute;
@@ -755,6 +802,8 @@ window.__ModuleLoader__.load({
   .dsh-fc-badge.is-pending { animation: none; }
   .dsh-fc-reminderDot.is-pending { animation: none; }
   .dsh-fc-card.is-active, .dsh-fc-railBtn.is-active { animation: none; }
+  .dsh-fc-nameTrack { animation: none; }
+  .dsh-fc-done { animation: none; opacity: 1; }
 }
 `;
 
@@ -2024,6 +2073,21 @@ window.__ModuleLoader__.load({
         return levels;
       }, [items, ungrouped, statuses]);
 
+      /* Folders with a conversation running right now: their bottom line says
+         what is happening instead of only the folder name. */
+      const runningFolders = useMemo(() => {
+        const running = new Set();
+        const note = (workspaceId, sessionId) => {
+          const status = sessionStatusOf(statuses, sessionId);
+          if (status && status.running === true) running.add(workspaceId);
+        };
+        for (const item of items) {
+          for (const id of Array.isArray(item.sessionIds) ? item.sessionIds : []) note(item.workspaceId, id);
+        }
+        for (const id of ungrouped) note(UNGROUPED_KEY, id);
+        return running;
+      }, [items, ungrouped, statuses]);
+
       /* Cards in the chosen order: registry order, or most recently used folder
          first (a folder without sessions keeps the lowest rank). */
       const cardSpecs = useMemo(() => {
@@ -2042,6 +2106,7 @@ window.__ModuleLoader__.load({
           title: workspaceTitle(item, t),
           image: images[item.workspaceId] || '',
           attention: attention.get(item.workspaceId) || null,
+          running: runningFolders.has(item.workspaceId),
           active: item.workspaceId === activeWorkspaceId,
           lastActivity: lastActivity(item),
         }));
@@ -2052,17 +2117,18 @@ window.__ModuleLoader__.load({
             title: t('ungrouped'),
             image: images[UNGROUPED_KEY] || '',
             attention: attention.get(UNGROUPED_KEY) || null,
+            running: runningFolders.has(UNGROUPED_KEY),
             active: activeWorkspaceId === UNGROUPED_KEY,
             lastActivity: 0,
           });
         }
         return specs;
-      }, [items, images, sort, ungrouped, byId, attention, activeWorkspaceId, t]);
+      }, [items, images, sort, ungrouped, byId, attention, runningFolders, activeWorkspaceId, t]);
 
       /** Accessible name that carries the card's attention state. */
       const cardLabel = spec => {
         const parts = [spec.title];
-        if (spec.active) parts.push(t('workingHere'));
+        if (spec.running || spec.active) parts.push(t('workingHere'));
         if (spec.attention === 'pending') parts.push(t('needsYou'));
         else if (spec.attention === 'done') parts.push(t('finishedUnread'));
         return parts.join(' · ');
@@ -2113,6 +2179,39 @@ window.__ModuleLoader__.load({
                 String(reminders.done.length))
             : null,
           );
+
+      /* "叮，完成了！" — a run that finishes while the grid is on screen flashes
+         a bubble on its card, on top of the green dot. */
+      const [doneFlash, setDoneFlash] = useState(null);
+      const flashTimers = useRef([]);
+      const levelsRef = useRef(new Map());
+      const primedRef = useRef(false);
+      useEffect(() => () => {
+        for (const timer of flashTimers.current) clearTimeout(timer);
+        flashTimers.current = [];
+      }, []);
+      useEffect(() => {
+        const previous = levelsRef.current;
+        const next = new Map();
+        let flashId = null;
+        for (const spec of cardSpecs) {
+          if (spec.attention !== null) next.set(spec.id, spec.attention);
+          if (spec.attention === 'done' && previous.get(spec.id) !== 'done' && flashId === null
+            && openId === null && !searchOpen) {
+            flashId = spec.id;
+          }
+        }
+        const wasPrimed = primedRef.current;
+        levelsRef.current = next;
+        if (items.length > 0) primedRef.current = true;
+        /* The first pass only records what is already finished, without
+           celebrating runs that ended before the page was opened. */
+        if (!wasPrimed || flashId === null) return;
+        setDoneFlash({ id: flashId, key: Date.now() });
+        flashTimers.current.push(setTimeout(() => {
+          setDoneFlash(current => (current && current.id === flashId ? null : current));
+        }, 2600));
+      }, [cardSpecs, openId, searchOpen, items.length]);
 
       const attentionBadge = spec => (spec.attention === null
         ? null
@@ -2199,8 +2298,17 @@ window.__ModuleLoader__.load({
           hasImage
             ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
             : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
-          h('span', { className: 'dsh-fc-name' }, spec.title),
+          spec.running
+            ? h('span', { className: 'dsh-fc-name is-marquee', 'aria-hidden': true },
+                h('span', { className: 'dsh-fc-nameTrack' },
+                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                ))
+            : h('span', { className: 'dsh-fc-name' }, spec.title),
           attentionBadge(spec),
+          doneFlash !== null && doneFlash.id === spec.id
+            ? h('span', { key: doneFlash.key, className: 'dsh-fc-done' }, t('dingDone'))
+            : null,
           ),
           h('div', { className: 'dsh-fc-tools' },
             h('button', {
