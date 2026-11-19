@@ -2180,37 +2180,56 @@ window.__ModuleLoader__.load({
             : null,
           );
 
-      /* "叮，完成了！" — a run that finishes while the grid is on screen flashes
-         a bubble on its card, on top of the green dot. */
-      const [doneFlash, setDoneFlash] = useState(null);
+      /* "叮，完成了！" — a run that finishes while the grid is on screen, or
+         one that finished while a folder was open, flashes on its card. The
+         queued ones surface the moment the grid comes back. */
+      const [flashes, setFlashes] = useState({});
       const flashTimers = useRef([]);
       const levelsRef = useRef(new Map());
       const primedRef = useRef(false);
+      const pendingFlashes = useRef(new Set());
       useEffect(() => () => {
         for (const timer of flashTimers.current) clearTimeout(timer);
         flashTimers.current = [];
       }, []);
       useEffect(() => {
+        const gridVisible = openId === null && !searchOpen;
         const previous = levelsRef.current;
         const next = new Map();
-        let flashId = null;
+        const wasPrimed = primedRef.current;
         for (const spec of cardSpecs) {
           if (spec.attention !== null) next.set(spec.id, spec.attention);
-          if (spec.attention === 'done' && previous.get(spec.id) !== 'done' && flashId === null
-            && openId === null && !searchOpen) {
-            flashId = spec.id;
+          if (wasPrimed && spec.attention === 'done' && previous.get(spec.id) !== 'done') {
+            pendingFlashes.current.add(spec.id);
           }
         }
-        const wasPrimed = primedRef.current;
         levelsRef.current = next;
         if (items.length > 0) primedRef.current = true;
-        /* The first pass only records what is already finished, without
-           celebrating runs that ended before the page was opened. */
-        if (!wasPrimed || flashId === null) return;
-        setDoneFlash({ id: flashId, key: Date.now() });
-        flashTimers.current.push(setTimeout(() => {
-          setDoneFlash(current => (current && current.id === flashId ? null : current));
-        }, 2600));
+
+        if (!gridVisible || pendingFlashes.current.size === 0) return;
+        /* Only celebrate what is still unread, so a folder whose conversation
+           was already opened during the detour does not pop "ding" at you. */
+        const doneNow = new Set();
+        for (const spec of cardSpecs) if (spec.attention === 'done') doneNow.add(spec.id);
+        const ids = Array.from(pendingFlashes.current).filter(id => doneNow.has(id));
+        pendingFlashes.current.clear();
+        if (ids.length === 0) return;
+        const stamp = Date.now();
+        setFlashes(current => {
+          const merged = { ...current };
+          for (const id of ids) merged[id] = stamp;
+          return merged;
+        });
+        for (const id of ids) {
+          flashTimers.current.push(setTimeout(() => {
+            setFlashes(current => {
+              if (!(id in current)) return current;
+              const trimmed = { ...current };
+              delete trimmed[id];
+              return trimmed;
+            });
+          }, 2600));
+        }
       }, [cardSpecs, openId, searchOpen, items.length]);
 
       const attentionBadge = spec => (spec.attention === null
@@ -2306,8 +2325,8 @@ window.__ModuleLoader__.load({
                 ))
             : h('span', { className: 'dsh-fc-name' }, spec.title),
           attentionBadge(spec),
-          doneFlash !== null && doneFlash.id === spec.id
-            ? h('span', { key: doneFlash.key, className: 'dsh-fc-done' }, t('dingDone'))
+          flashes[spec.id] !== undefined
+            ? h('span', { key: flashes[spec.id], className: 'dsh-fc-done' }, t('dingDone'))
             : null,
           ),
           h('div', { className: 'dsh-fc-tools' },
