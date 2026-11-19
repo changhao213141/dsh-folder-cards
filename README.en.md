@@ -6,7 +6,7 @@ Turn the **DeepSeek Harness (DSH)** sidebar's workspace region into **portrait f
 
 **The card grid** — two 3:4 columns, the folder name under each card, and "insert image / reset" in the top-right corner on hover. The dot in the **bottom-left corner** is the attention state: amber means the folder has a conversation waiting for your approval or answer, green means a run finished and has not been opened yet.
 
-![Card grid: two columns of portrait folder cards with amber and green status dots](docs/screenshots/grid-status-dots.png)
+![Card grid: two columns of portrait folder cards with amber and green status dots](docs/screenshots/card-grid.png)
 
 **Inside a folder** — back button on top, then "New session" and this folder's conversations (title plus relative time). The `●1` on the header row is a **cross-folder reminder**: while you work in another area it still shows how many pending / finished-unread items the other folders have.
 
