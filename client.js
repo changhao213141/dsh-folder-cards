@@ -70,6 +70,7 @@ window.__ModuleLoader__.load({
       otherFoldersPending: '{n} 个待处理',
       otherFoldersDone: '{n} 个已完成',
       backToConversation: '返回上一个会话',
+      workingHere: '正在这里干活',
       viewOptions: '视图选项',
       sortBy: '排序',
       sortManual: '默认顺序',
@@ -123,6 +124,7 @@ window.__ModuleLoader__.load({
       otherFoldersPending: '{n} pending',
       otherFoldersDone: '{n} done',
       backToConversation: 'Back to previous conversation',
+      workingHere: 'Working here',
       viewOptions: 'View options',
       sortBy: 'Sort',
       sortManual: 'Folder order',
@@ -506,6 +508,23 @@ window.__ModuleLoader__.load({
 .dsh-fc-card.has-image .dsh-fc-badge { bottom: 27px; }
 .dsh-fc-badge.is-done { background: var(--dsw-alias-state-success-primary); }
 .dsh-fc-badge.is-pending { animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite; }
+/* The folder the main conversation lives in: a small wiggle once every few
+   seconds plus a brand border, so "where I am working" reads at a glance
+   without pulling attention constantly. */
+.dsh-fc-card.is-active,
+.dsh-fc-railBtn.is-active { border-color: var(--dsw-alias-brand-primary); }
+.dsh-fc-card.is-active,
+.dsh-fc-railBtn.is-active { animation: dsh-fc-working 4.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite; }
+@keyframes dsh-fc-working {
+  0%, 100% { transform: rotate(0deg); }
+  2% { transform: rotate(-0.9deg); }
+  4% { transform: rotate(0.9deg); }
+  6% { transform: rotate(-0.6deg); }
+  8% { transform: rotate(0.6deg); }
+  10% { transform: rotate(-0.3deg); }
+  12% { transform: rotate(0.3deg); }
+  14% { transform: rotate(0deg); }
+}
 @keyframes dsh-fc-badge-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.35); opacity: 0.72; }
@@ -735,6 +754,7 @@ window.__ModuleLoader__.load({
   .dsh-fc-ripple { display: none; }
   .dsh-fc-badge.is-pending { animation: none; }
   .dsh-fc-reminderDot.is-pending { animation: none; }
+  .dsh-fc-card.is-active, .dsh-fc-railBtn.is-active { animation: none; }
 }
 `;
 
@@ -1594,6 +1614,16 @@ window.__ModuleLoader__.load({
         return null;
       }, [sessionIds, byId]);
 
+      /* The folder whose conversation the main view is showing right now: the
+         one that reads as "the area I am working in". */
+      const activeWorkspaceId = useMemo(() => {
+        if (currentSessionId === null) return null;
+        for (const item of items) {
+          if (Array.isArray(item.sessionIds) && item.sessionIds.indexOf(currentSessionId) >= 0) return item.workspaceId;
+        }
+        return ungrouped.indexOf(currentSessionId) >= 0 ? UNGROUPED_KEY : null;
+      }, [currentSessionId, items, ungrouped]);
+
       /* The composer chip needs the conversation the main view shows, and the
          conversation being left the moment a row is opened. */
       const currentIdRef = useRef(null);
@@ -2012,6 +2042,7 @@ window.__ModuleLoader__.load({
           title: workspaceTitle(item, t),
           image: images[item.workspaceId] || '',
           attention: attention.get(item.workspaceId) || null,
+          active: item.workspaceId === activeWorkspaceId,
           lastActivity: lastActivity(item),
         }));
         if (sort === 'recent') specs.sort((left, right) => right.lastActivity - left.lastActivity);
@@ -2021,17 +2052,20 @@ window.__ModuleLoader__.load({
             title: t('ungrouped'),
             image: images[UNGROUPED_KEY] || '',
             attention: attention.get(UNGROUPED_KEY) || null,
+            active: activeWorkspaceId === UNGROUPED_KEY,
             lastActivity: 0,
           });
         }
         return specs;
-      }, [items, images, sort, ungrouped, byId, attention, t]);
+      }, [items, images, sort, ungrouped, byId, attention, activeWorkspaceId, t]);
 
       /** Accessible name that carries the card's attention state. */
       const cardLabel = spec => {
-        if (spec.attention === 'pending') return `${spec.title} · ${t('needsYou')}`;
-        if (spec.attention === 'done') return `${spec.title} · ${t('finishedUnread')}`;
-        return spec.title;
+        const parts = [spec.title];
+        if (spec.active) parts.push(t('workingHere'));
+        if (spec.attention === 'pending') parts.push(t('needsYou'));
+        else if (spec.attention === 'done') parts.push(t('finishedUnread'));
+        return parts.join(' · ');
       };
 
       /* While a folder is open its list replaces the grid, so the other
@@ -2123,7 +2157,7 @@ window.__ModuleLoader__.load({
           cardSpecs.map(spec => h('button', {
             key: spec.id,
             type: 'button',
-            className: 'dsh-fc-railBtn',
+            className: 'dsh-fc-railBtn' + (spec.active ? ' is-active' : ''),
             title: cardLabel(spec),
             'aria-label': cardLabel(spec),
             onClick: () => {
@@ -2144,7 +2178,7 @@ window.__ModuleLoader__.load({
               if (element) cardRefs.current.set(spec.id, element);
               else cardRefs.current.delete(spec.id);
             },
-            className: 'dsh-fc-card' + (hasImage ? ' has-image' : ''),
+            className: 'dsh-fc-card' + (hasImage ? ' has-image' : '') + (spec.active ? ' is-active' : ''),
             title: cardLabel(spec),
             'aria-label': cardLabel(spec),
             onClick: event => {

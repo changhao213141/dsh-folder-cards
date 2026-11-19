@@ -363,6 +363,23 @@
 .dsh-fc-card.has-image .dsh-fc-badge { bottom: 27px; }
 .dsh-fc-badge.is-done { background: var(--dsw-alias-state-success-primary); }
 .dsh-fc-badge.is-pending { animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite; }
+/* The folder the main conversation lives in: a small wiggle once every few
+   seconds plus a brand border, so "where I am working" reads at a glance
+   without pulling attention constantly. */
+.dsh-fc-card.is-active,
+.dsh-fc-railBtn.is-active { border-color: var(--dsw-alias-brand-primary); }
+.dsh-fc-card.is-active,
+.dsh-fc-railBtn.is-active { animation: dsh-fc-working 4.6s cubic-bezier(0.36, 0.07, 0.19, 0.97) infinite; }
+@keyframes dsh-fc-working {
+  0%, 100% { transform: rotate(0deg); }
+  2% { transform: rotate(-0.9deg); }
+  4% { transform: rotate(0.9deg); }
+  6% { transform: rotate(-0.6deg); }
+  8% { transform: rotate(0.6deg); }
+  10% { transform: rotate(-0.3deg); }
+  12% { transform: rotate(0.3deg); }
+  14% { transform: rotate(0deg); }
+}
 @keyframes dsh-fc-badge-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.35); opacity: 0.72; }
@@ -592,6 +609,7 @@
   .dsh-fc-ripple { display: none; }
   .dsh-fc-badge.is-pending { animation: none; }
   .dsh-fc-reminderDot.is-pending { animation: none; }
+  .dsh-fc-card.is-active, .dsh-fc-railBtn.is-active { animation: none; }
 }
 `;
 
