@@ -84,6 +84,19 @@ window.__ModuleLoader__.load({
       renameFailed: '重命名失败',
       forkFailed: '分叉失败',
       archiveFailed: '归档操作失败',
+      settingsTitle: '文件夹卡片',
+      settingsGroupMotion: '动效',
+      motionWiggle: '当前文件夹抖动',
+      motionWiggleHint: '你正在干活的文件夹轻轻抖一下；关掉后只保留品牌色边框',
+      motionMarquee: '运行中文字滚动',
+      motionMarqueeHint: '有会话在跑时，卡片底部滚动显示「正在这里干活」',
+      motionCelebrate: '完成气泡',
+      motionCelebrateHint: '会话跑完时在卡片上弹出「叮，完成了！」',
+      motionRipple: '点击水波',
+      motionRippleHint: '进出文件夹时的水波扩散与回收动画',
+      settingsGroupBehavior: '行为',
+      rememberFolder: '记住上次打开的文件夹',
+      rememberFolderHint: '下次打开 DSH 直接回到这个文件夹',
       'time.now': '刚刚',
       'time.minutes': '{n} 分钟',
       'time.hours': '{n} 小时',
@@ -139,6 +152,19 @@ window.__ModuleLoader__.load({
       renameFailed: 'Rename failed',
       forkFailed: 'Fork failed',
       archiveFailed: 'Archive action failed',
+      settingsTitle: 'Folder cards',
+      settingsGroupMotion: 'Motion',
+      motionWiggle: 'Wiggle the current folder',
+      motionWiggleHint: 'The folder you are working in rocks slightly; off keeps only the brand border',
+      motionMarquee: 'Scroll the running label',
+      motionMarqueeHint: 'While a conversation runs, the card bottom scrolls "Working here"',
+      motionCelebrate: 'Finished bubble',
+      motionCelebrateHint: 'Pops "Ding — done!" on the card when a run finishes',
+      motionRipple: 'Click ripple',
+      motionRippleHint: 'The droplet ripple on the way in and out of a folder',
+      settingsGroupBehavior: 'Behaviour',
+      rememberFolder: 'Reopen the last folder',
+      rememberFolderHint: 'Go straight back to that folder the next time DSH opens',
       'time.now': 'now',
       'time.minutes': '{n} min',
       'time.hours': '{n} h',
@@ -572,6 +598,10 @@ window.__ModuleLoader__.load({
   12% { transform: rotate(0.3deg); }
   14% { transform: rotate(0deg); }
 }
+/* Settings switches: the borders stay as static cues, the motion stops. */
+.dsh-fc-root.no-wiggle .dsh-fc-card.is-active,
+.dsh-fc-root.no-wiggle .dsh-fc-railBtn.is-active { animation: none; }
+.dsh-fc-root.no-celebrate .dsh-fc-done { display: none; }
 @keyframes dsh-fc-badge-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.35); opacity: 0.72; }
@@ -808,7 +838,8 @@ window.__ModuleLoader__.load({
 `;
 
 /**
- * Browser-local persistence: per-folder card artwork and view preferences (sort, last opened folder).
+ * Browser-local persistence: per-folder card artwork and the settings blob
+ * (sort order, the folder to reopen, and the motion switches).
  *
  * This file is a fragment of the single client bundle. build.mjs concatenates
  * the sections in name order inside the factory closure, so declarations are
@@ -841,32 +872,84 @@ window.__ModuleLoader__.load({
       }
     }
 
-    /** View preferences: card order and the folder to reopen. */
+    /** Settings blob: order, the folder to reopen, and the motion switches. */
     const PREFS_KEY = 'dsh.folderCards.prefs.v1';
+
+    /** Motion is on by default; users switch individual effects off in Settings. */
+    const DEFAULT_MOTION = { wiggle: true, marquee: true, celebrate: true, ripple: true };
+
+    function normalizeMotion(value) {
+      const source = value && typeof value === 'object' ? value : {};
+      const motion = {};
+      for (const key of Object.keys(DEFAULT_MOTION)) {
+        motion[key] = typeof source[key] === 'boolean' ? source[key] : DEFAULT_MOTION[key];
+      }
+      return motion;
+    }
 
     function readPrefs() {
       try {
         const raw = window.localStorage.getItem(PREFS_KEY);
-        if (!raw) return { sort: 'manual', lastOpenId: null };
+        if (!raw) {
+          return { sort: 'manual', lastOpenId: null, rememberFolder: true, motion: normalizeMotion(null) };
+        }
         const parsed = JSON.parse(raw);
         return {
           sort: parsed && parsed.sort === 'recent' ? 'recent' : 'manual',
           lastOpenId: parsed && typeof parsed.lastOpenId === 'string' && parsed.lastOpenId !== ''
             ? parsed.lastOpenId
             : null,
+          rememberFolder: !parsed || parsed.rememberFolder !== false,
+          motion: normalizeMotion(parsed && parsed.motion),
         };
       } catch (error) {
-        return { sort: 'manual', lastOpenId: null };
+        return { sort: 'manual', lastOpenId: null, rememberFolder: true, motion: normalizeMotion(null) };
       }
     }
 
     function writePrefs(prefs) {
       try {
-        window.localStorage.setItem(PREFS_KEY, JSON.stringify({ version: 1, ...prefs }));
+        window.localStorage.setItem(PREFS_KEY, JSON.stringify({ version: 2, ...prefs }));
         return true;
       } catch (error) {
         return false;
       }
+    }
+
+    /**
+     * One observable settings blob shared by the sidebar and the settings page,
+     * so changing a switch applies without a reload.
+     */
+    function createSettingsStore() {
+      let state = readPrefs();
+      const listeners = new Set();
+      const emit = () => {
+        for (const listener of listeners) {
+          try {
+            listener();
+          } catch (error) {
+            /* a broken listener must not break the others */
+          }
+        }
+      };
+      return {
+        subscribe(listener) {
+          listeners.add(listener);
+          return () => { listeners.delete(listener); };
+        },
+        getSnapshot() {
+          return state;
+        },
+        /** Merge a patch, persist it, and notify both surfaces. */
+        update(patch) {
+          const next = { ...state, ...patch };
+          next.motion = normalizeMotion(next.motion);
+          if (next === state) return;
+          state = next;
+          writePrefs({ sort: state.sort, lastOpenId: state.lastOpenId, rememberFolder: state.rememberFolder, motion: state.motion });
+          emit();
+        },
+      };
     }
 
 /**
@@ -1436,7 +1519,23 @@ window.__ModuleLoader__.load({
       const sessionState = useSessions(state => state) || EMPTY_SESSIONS;
       const statuses = useSessionStatus(state => state) || null;
 
-      const [openId, setOpenId] = useState(() => readPrefs().lastOpenId);
+      /* The settings blob is shared with the settings page, so a switch flips
+         the sidebar without a reload. */
+      const settingsStore = props.settings && typeof props.settings === 'object' ? props.settings : null;
+      const [settingsState, setSettingsState] = useState(() => (
+        settingsStore && typeof settingsStore.getSnapshot === 'function' ? settingsStore.getSnapshot() : readPrefs()
+      ));
+      useEffect(() => {
+        if (!settingsStore || typeof settingsStore.subscribe !== 'function') return undefined;
+        return settingsStore.subscribe(() => setSettingsState(settingsStore.getSnapshot()));
+      }, [settingsStore]);
+      const motion = settingsState.motion || DEFAULT_MOTION;
+      const sort = settingsState.sort;
+      const patchSettings = useCallback(patch => {
+        if (settingsStore && typeof settingsStore.update === 'function') settingsStore.update(patch);
+      }, [settingsStore]);
+
+      const [openId, setOpenId] = useState(() => (settingsState.rememberFolder ? settingsState.lastOpenId : null));
       const [images, setImages] = useState(readImages);
       const [busy, setBusy] = useState(false);
       const [notice, setNotice] = useState('');
@@ -1445,7 +1544,6 @@ window.__ModuleLoader__.load({
       const [searchOpen, setSearchOpen] = useState(false);
       const [remoteSearch, setRemoteSearch] = useState({ query: '', status: 'idle', items: [] });
       const [showArchived, setShowArchived] = useState(false);
-      const [sort, setSort] = useState(() => readPrefs().sort);
       const [viewOpen, setViewOpen] = useState(false);
       const [fallbackMenu, setFallbackMenu] = useState(null);
       const [renaming, setRenaming] = useState(null);
@@ -1470,6 +1568,7 @@ window.__ModuleLoader__.load({
          The size is closed-loop: measure how much the outer viewport
          currently overflows, subtract exactly that from the region, and the
          outer settles at zero overflow regardless of how the shell is built. */
+      const geometryWarned = useRef(false);
       const measureAvail = useCallback(() => {
         const element = rootRef.current;
         const area = element && element.parentElement;
@@ -1480,7 +1579,15 @@ window.__ModuleLoader__.load({
           if (overflowY === 'auto' || overflowY === 'scroll') break;
           scroller = scroller.parentElement;
         }
-        if (!scroller || scroller === document.body) return;
+        if (!scroller || scroller === document.body) {
+          /* The shell layout changed under us: fall back to the CSS cap
+             (100cqh) and say so once, instead of silently mis-sizing. */
+          if (!geometryWarned.current) {
+            geometryWarned.current = true;
+            console.warn('[folder-cards] sidebar scroll viewport not found; falling back to the 100cqh cap.');
+          }
+          return;
+        }
         const height = element.getBoundingClientRect().height;
         if (!(height > 0)) return;
         const available = scroller.clientHeight;
@@ -1577,10 +1684,13 @@ window.__ModuleLoader__.load({
         setFallbackMenu(null);
       }, [openId]);
 
-      /* Remember the view choice and the folder to reopen after a reload. */
+      /* Remember the folder to reopen, when the setting asks for it. */
       useEffect(() => {
-        writePrefs({ sort, lastOpenId: openId });
-      }, [sort, openId]);
+        if (!settingsStore || typeof settingsStore.update !== 'function') return;
+        if (!settingsState.rememberFolder) return;
+        if (settingsState.lastOpenId === openId) return;
+        settingsStore.update({ lastOpenId: openId });
+      }, [openId, settingsState.rememberFolder, settingsState.lastOpenId, settingsStore]);
 
       /* Dismiss plugin-local popovers on an outside press. */
       useEffect(() => {
@@ -2020,23 +2130,23 @@ window.__ModuleLoader__.load({
       }, []);
 
       const openCard = useCallback((workspaceId, clientX, clientY) => {
-        const animated = startPulse(clientX, clientY, 'in');
+        const animated = motion.ripple && startPulse(clientX, clientY, 'in');
         lastOpened.current = workspaceId;
         if (!animated) {
           setOpenId(workspaceId);
           return;
         }
         pulseTimers.current.push(setTimeout(() => setOpenId(workspaceId), 150));
-      }, [startPulse]);
+      }, [startPulse, motion.ripple]);
 
       const leaveFolder = useCallback((clientX, clientY) => {
-        const animated = startPulse(clientX, clientY, 'out');
+        const animated = motion.ripple && startPulse(clientX, clientY, 'out');
         if (!animated) {
           setOpenId(null);
           return;
         }
         pulseTimers.current.push(setTimeout(() => setOpenId(null), 160));
-      }, [startPulse]);
+      }, [startPulse, motion.ripple]);
 
       const pickSearchResult = useCallback(row => {
         if (row.type === 'workspace') {
@@ -2199,13 +2309,17 @@ window.__ModuleLoader__.load({
         const wasPrimed = primedRef.current;
         for (const spec of cardSpecs) {
           if (spec.attention !== null) next.set(spec.id, spec.attention);
-          if (wasPrimed && spec.attention === 'done' && previous.get(spec.id) !== 'done') {
+          if (wasPrimed && motion.celebrate && spec.attention === 'done' && previous.get(spec.id) !== 'done') {
             pendingFlashes.current.add(spec.id);
           }
         }
         levelsRef.current = next;
         if (items.length > 0) primedRef.current = true;
 
+        if (!motion.celebrate) {
+          pendingFlashes.current.clear();
+          return;
+        }
         if (!gridVisible || pendingFlashes.current.size === 0) return;
         /* Only celebrate what is still unread, so a folder whose conversation
            was already opened during the detour does not pop "ding" at you. */
@@ -2230,7 +2344,7 @@ window.__ModuleLoader__.load({
             });
           }, 2600));
         }
-      }, [cardSpecs, openId, searchOpen, items.length]);
+      }, [cardSpecs, openId, searchOpen, items.length, motion.celebrate]);
 
       const attentionBadge = spec => (spec.attention === null
         ? null
@@ -2269,7 +2383,12 @@ window.__ModuleLoader__.load({
           }, historyGlyph());
 
       if (!wide) {
-        return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
+        return h('div', {
+          className: 'dsh-fc-root dsh-fc-rail' + (motion.wiggle ? '' : ' no-wiggle')
+            + (motion.celebrate ? '' : ' no-celebrate'),
+          role: 'group',
+          'aria-label': t('workspaces'),
+        },
           styleNode,
           statusText === '' ? null : h('div', { className: 'dsh-fc-notice', role: 'status' }, statusText),
           cardSpecs.map(spec => h('button', {
@@ -2318,11 +2437,13 @@ window.__ModuleLoader__.load({
             ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
             : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
           spec.running
-            ? h('span', { className: 'dsh-fc-name is-marquee', 'aria-hidden': true },
-                h('span', { className: 'dsh-fc-nameTrack' },
-                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
-                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
-                ))
+            ? (motion.marquee
+                ? h('span', { className: 'dsh-fc-name is-marquee', 'aria-hidden': true },
+                    h('span', { className: 'dsh-fc-nameTrack' },
+                      h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                      h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                    ))
+                : h('span', { className: 'dsh-fc-name' }, `${spec.title} · ${t('workingHere')}`))
             : h('span', { className: 'dsh-fc-name' }, spec.title),
           attentionBadge(spec),
           flashes[spec.id] !== undefined
@@ -2395,12 +2516,12 @@ window.__ModuleLoader__.load({
           h('button', {
             type: 'button',
             className: 'dsh-fc-segBtn' + (sort === 'manual' ? ' is-active' : ''),
-            onClick: () => setSort('manual'),
+            onClick: () => patchSettings({ sort: 'manual' }),
           }, t('sortManual')),
           h('button', {
             type: 'button',
             className: 'dsh-fc-segBtn' + (sort === 'recent' ? ' is-active' : ''),
-            onClick: () => setSort('recent'),
+            onClick: () => patchSettings({ sort: 'recent' }),
           }, t('sortRecent')),
         ),
         ),
@@ -2558,7 +2679,7 @@ window.__ModuleLoader__.load({
       );
 
       return h('div', {
-        className: 'dsh-fc-root is-wide',
+        className: 'dsh-fc-root is-wide' + (motion.wiggle ? '' : ' no-wiggle') + (motion.celebrate ? '' : ' no-celebrate'),
         ref: rootRef,
         style: availHeight === null ? undefined : { height: availHeight + 'px' },
       },
@@ -2642,6 +2763,175 @@ window.__ModuleLoader__.load({
           'aria-hidden': true,
           onChange: onPickFile,
         }),
+      );
+    }
+
+/**
+ * The plugin's settings page: the motion switches and two behaviour options,
+ * all persisted in the settings blob the sidebar reads.
+ *
+ * This file is a fragment of the single client bundle. build.mjs concatenates
+ * the sections in name order inside the factory closure, so declarations are
+ * shared across files and no import statements are needed.
+ */
+
+    /* ---------- settings page ---------- */
+
+    const SETTINGS_CSS = `
+.dsh-fc-set {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 2px 0 14px 0;
+  color: var(--dsw-alias-label-primary);
+  font-size: 13px;
+}
+.dsh-fc-setGroup { display: flex; flex-direction: column; gap: 4px; }
+.dsh-fc-setGroupTitle {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--dsw-alias-label-secondary);
+  padding-bottom: 2px;
+}
+.dsh-fc-setRow {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 6px 0;
+  border-top: 1px solid var(--dsw-alias-border-l1);
+}
+.dsh-fc-setRow:first-of-type { border-top: 0; }
+.dsh-fc-setText { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.dsh-fc-setLabel { font-size: 13px; line-height: 18px; }
+.dsh-fc-setHint { font-size: 11px; line-height: 15px; color: var(--dsw-alias-label-secondary); }
+.dsh-fc-switch {
+  position: relative;
+  flex: none;
+  width: 34px;
+  height: 20px;
+  margin-top: 2px;
+  padding: 0;
+  border: 1px solid var(--dsw-alias-border-l2);
+  border-radius: 999px;
+  background: var(--dsw-alias-bg-layer-2);
+  cursor: pointer;
+  transition: background 120ms ease, border-color 120ms ease;
+}
+.dsh-fc-switch::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--dsw-alias-label-secondary);
+  transition: transform 120ms ease, background 120ms ease;
+}
+.dsh-fc-switch[aria-checked="true"] {
+  background: var(--dsw-alias-brand-primary);
+  border-color: var(--dsw-alias-brand-primary);
+}
+.dsh-fc-switch[aria-checked="true"]::after {
+  transform: translateX(14px);
+  background: var(--dsw-alias-bg-base);
+}
+.dsh-fc-switch:focus-visible {
+  outline: 2px solid var(--dsw-alias-brand-primary);
+  outline-offset: 2px;
+}
+.dsh-fc-setSeg { display: flex; gap: 6px; flex: none; }
+.dsh-fc-setSegBtn {
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--dsw-alias-border-l1);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--dsw-alias-label-secondary);
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+.dsh-fc-setSegBtn.is-active {
+  border-color: var(--dsw-alias-brand-primary);
+  background: var(--dsw-alias-bg-layer-2);
+  color: var(--dsw-alias-label-primary);
+}
+@media (prefers-reduced-motion: reduce) {
+  .dsh-fc-switch, .dsh-fc-switch::after { transition: none; }
+}
+`;
+
+    /**
+     * Settings page row for the plugin's Preferences section.
+     * @param props - the settings store plus the plugin's locale seat.
+     */
+    function FolderCardsSettings(props) {
+      const store = props.settings && typeof props.settings === 'object' ? props.settings : null;
+      const t = key => {
+        try {
+          const value = typeof props.t === 'function' ? props.t(key) : key;
+          return typeof value === 'string' && value !== '' ? value : key;
+        } catch (error) {
+          return key;
+        }
+      };
+      const [state, setState] = useState(() => (
+        store && typeof store.getSnapshot === 'function' ? store.getSnapshot() : readPrefs()
+      ));
+      useEffect(() => {
+        if (!store || typeof store.subscribe !== 'function') return undefined;
+        return store.subscribe(() => setState(store.getSnapshot()));
+      }, [store]);
+
+      const motion = state.motion || DEFAULT_MOTION;
+      const update = patch => {
+        if (store && typeof store.update === 'function') store.update(patch);
+      };
+      const toggleMotion = key => update({ motion: { ...motion, [key]: !motion[key] } });
+
+      const switchRow = (label, hint, checked, onToggle) => h('div', { className: 'dsh-fc-setRow', key: label },
+        h('div', { className: 'dsh-fc-setText' },
+          h('span', { className: 'dsh-fc-setLabel' }, label),
+          h('span', { className: 'dsh-fc-setHint' }, hint)),
+        h('button', {
+          type: 'button',
+          role: 'switch',
+          className: 'dsh-fc-switch',
+          'aria-checked': checked ? 'true' : 'false',
+          'aria-label': label,
+          onClick: onToggle,
+        }));
+
+      const segRow = (label, options) => h('div', { className: 'dsh-fc-setRow', key: label },
+        h('div', { className: 'dsh-fc-setText' },
+          h('span', { className: 'dsh-fc-setLabel' }, label)),
+        h('div', { className: 'dsh-fc-setSeg' },
+          options.map(option => h('button', {
+            key: option.value,
+            type: 'button',
+            className: 'dsh-fc-setSegBtn' + (option.active ? ' is-active' : ''),
+            'aria-pressed': option.active ? 'true' : 'false',
+            onClick: option.onSelect,
+          }, option.label))));
+
+      return h('div', { className: 'dsh-fc-set' },
+        h('style', null, SETTINGS_CSS),
+        h('div', { className: 'dsh-fc-setGroup' },
+          h('div', { className: 'dsh-fc-setGroupTitle' }, t('settingsGroupMotion')),
+          switchRow(t('motionWiggle'), t('motionWiggleHint'), motion.wiggle, () => toggleMotion('wiggle')),
+          switchRow(t('motionMarquee'), t('motionMarqueeHint'), motion.marquee, () => toggleMotion('marquee')),
+          switchRow(t('motionCelebrate'), t('motionCelebrateHint'), motion.celebrate, () => toggleMotion('celebrate')),
+          switchRow(t('motionRipple'), t('motionRippleHint'), motion.ripple, () => toggleMotion('ripple'))),
+        h('div', { className: 'dsh-fc-setGroup' },
+          h('div', { className: 'dsh-fc-setGroupTitle' }, t('settingsGroupBehavior')),
+          switchRow(t('rememberFolder'), t('rememberFolderHint'), state.rememberFolder !== false,
+            () => update({ rememberFolder: state.rememberFolder === false })),
+          segRow(t('sortBy'), [
+            { value: 'manual', label: t('sortManual'), active: state.sort !== 'recent', onSelect: () => update({ sort: 'manual' }) },
+            { value: 'recent', label: t('sortRecent'), active: state.sort === 'recent', onSelect: () => update({ sort: 'recent' }) },
+          ])),
       );
     }
 
@@ -2782,12 +3072,13 @@ window.__ModuleLoader__.load({
         };
 
         const history = createHistoryStore();
+        const settings = createSettingsStore();
 
         ctx.effect(() => ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
           name: 'sidebar.workspaces',
           priority: -1,
           locale: NS,
-          inject: () => ({ api, history }),
+          inject: () => ({ api, history, settings }),
         }, FolderCards)), 'folder-cards: sidebar section');
 
         /* The way back sits in the composer tool row, next to the controls the
@@ -2799,6 +3090,16 @@ window.__ModuleLoader__.load({
           locale: NS,
           inject: () => ({ api, history }),
         }, BackToConversation)), 'folder-cards: composer history chip');
+
+        /* Settings → Plugins → 文件夹卡片: motion switches and behaviour. */
+        ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section',
+          id: 'folder-cards',
+          order: 40,
+          label: () => translate('settingsTitle'),
+          locale: NS,
+          inject: () => ({ settings }),
+        }, FolderCardsSettings)), 'folder-cards: settings page');
       },
     };
   },

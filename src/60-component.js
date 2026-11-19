@@ -43,7 +43,23 @@
       const sessionState = useSessions(state => state) || EMPTY_SESSIONS;
       const statuses = useSessionStatus(state => state) || null;
 
-      const [openId, setOpenId] = useState(() => readPrefs().lastOpenId);
+      /* The settings blob is shared with the settings page, so a switch flips
+         the sidebar without a reload. */
+      const settingsStore = props.settings && typeof props.settings === 'object' ? props.settings : null;
+      const [settingsState, setSettingsState] = useState(() => (
+        settingsStore && typeof settingsStore.getSnapshot === 'function' ? settingsStore.getSnapshot() : readPrefs()
+      ));
+      useEffect(() => {
+        if (!settingsStore || typeof settingsStore.subscribe !== 'function') return undefined;
+        return settingsStore.subscribe(() => setSettingsState(settingsStore.getSnapshot()));
+      }, [settingsStore]);
+      const motion = settingsState.motion || DEFAULT_MOTION;
+      const sort = settingsState.sort;
+      const patchSettings = useCallback(patch => {
+        if (settingsStore && typeof settingsStore.update === 'function') settingsStore.update(patch);
+      }, [settingsStore]);
+
+      const [openId, setOpenId] = useState(() => (settingsState.rememberFolder ? settingsState.lastOpenId : null));
       const [images, setImages] = useState(readImages);
       const [busy, setBusy] = useState(false);
       const [notice, setNotice] = useState('');
@@ -52,7 +68,6 @@
       const [searchOpen, setSearchOpen] = useState(false);
       const [remoteSearch, setRemoteSearch] = useState({ query: '', status: 'idle', items: [] });
       const [showArchived, setShowArchived] = useState(false);
-      const [sort, setSort] = useState(() => readPrefs().sort);
       const [viewOpen, setViewOpen] = useState(false);
       const [fallbackMenu, setFallbackMenu] = useState(null);
       const [renaming, setRenaming] = useState(null);
@@ -77,6 +92,7 @@
          The size is closed-loop: measure how much the outer viewport
          currently overflows, subtract exactly that from the region, and the
          outer settles at zero overflow regardless of how the shell is built. */
+      const geometryWarned = useRef(false);
       const measureAvail = useCallback(() => {
         const element = rootRef.current;
         const area = element && element.parentElement;
@@ -87,7 +103,15 @@
           if (overflowY === 'auto' || overflowY === 'scroll') break;
           scroller = scroller.parentElement;
         }
-        if (!scroller || scroller === document.body) return;
+        if (!scroller || scroller === document.body) {
+          /* The shell layout changed under us: fall back to the CSS cap
+             (100cqh) and say so once, instead of silently mis-sizing. */
+          if (!geometryWarned.current) {
+            geometryWarned.current = true;
+            console.warn('[folder-cards] sidebar scroll viewport not found; falling back to the 100cqh cap.');
+          }
+          return;
+        }
         const height = element.getBoundingClientRect().height;
         if (!(height > 0)) return;
         const available = scroller.clientHeight;
@@ -184,10 +208,13 @@
         setFallbackMenu(null);
       }, [openId]);
 
-      /* Remember the view choice and the folder to reopen after a reload. */
+      /* Remember the folder to reopen, when the setting asks for it. */
       useEffect(() => {
-        writePrefs({ sort, lastOpenId: openId });
-      }, [sort, openId]);
+        if (!settingsStore || typeof settingsStore.update !== 'function') return;
+        if (!settingsState.rememberFolder) return;
+        if (settingsState.lastOpenId === openId) return;
+        settingsStore.update({ lastOpenId: openId });
+      }, [openId, settingsState.rememberFolder, settingsState.lastOpenId, settingsStore]);
 
       /* Dismiss plugin-local popovers on an outside press. */
       useEffect(() => {
@@ -627,23 +654,23 @@
       }, []);
 
       const openCard = useCallback((workspaceId, clientX, clientY) => {
-        const animated = startPulse(clientX, clientY, 'in');
+        const animated = motion.ripple && startPulse(clientX, clientY, 'in');
         lastOpened.current = workspaceId;
         if (!animated) {
           setOpenId(workspaceId);
           return;
         }
         pulseTimers.current.push(setTimeout(() => setOpenId(workspaceId), 150));
-      }, [startPulse]);
+      }, [startPulse, motion.ripple]);
 
       const leaveFolder = useCallback((clientX, clientY) => {
-        const animated = startPulse(clientX, clientY, 'out');
+        const animated = motion.ripple && startPulse(clientX, clientY, 'out');
         if (!animated) {
           setOpenId(null);
           return;
         }
         pulseTimers.current.push(setTimeout(() => setOpenId(null), 160));
-      }, [startPulse]);
+      }, [startPulse, motion.ripple]);
 
       const pickSearchResult = useCallback(row => {
         if (row.type === 'workspace') {
@@ -806,13 +833,17 @@
         const wasPrimed = primedRef.current;
         for (const spec of cardSpecs) {
           if (spec.attention !== null) next.set(spec.id, spec.attention);
-          if (wasPrimed && spec.attention === 'done' && previous.get(spec.id) !== 'done') {
+          if (wasPrimed && motion.celebrate && spec.attention === 'done' && previous.get(spec.id) !== 'done') {
             pendingFlashes.current.add(spec.id);
           }
         }
         levelsRef.current = next;
         if (items.length > 0) primedRef.current = true;
 
+        if (!motion.celebrate) {
+          pendingFlashes.current.clear();
+          return;
+        }
         if (!gridVisible || pendingFlashes.current.size === 0) return;
         /* Only celebrate what is still unread, so a folder whose conversation
            was already opened during the detour does not pop "ding" at you. */
@@ -837,7 +868,7 @@
             });
           }, 2600));
         }
-      }, [cardSpecs, openId, searchOpen, items.length]);
+      }, [cardSpecs, openId, searchOpen, items.length, motion.celebrate]);
 
       const attentionBadge = spec => (spec.attention === null
         ? null
@@ -876,7 +907,12 @@
           }, historyGlyph());
 
       if (!wide) {
-        return h('div', { className: 'dsh-fc-root dsh-fc-rail', role: 'group', 'aria-label': t('workspaces') },
+        return h('div', {
+          className: 'dsh-fc-root dsh-fc-rail' + (motion.wiggle ? '' : ' no-wiggle')
+            + (motion.celebrate ? '' : ' no-celebrate'),
+          role: 'group',
+          'aria-label': t('workspaces'),
+        },
           styleNode,
           statusText === '' ? null : h('div', { className: 'dsh-fc-notice', role: 'status' }, statusText),
           cardSpecs.map(spec => h('button', {
@@ -925,11 +961,13 @@
             ? h('img', { className: 'dsh-fc-img', src: spec.image, alt: '', draggable: false })
             : h('span', { className: 'dsh-fc-glyph' }, folderGlyph()),
           spec.running
-            ? h('span', { className: 'dsh-fc-name is-marquee', 'aria-hidden': true },
-                h('span', { className: 'dsh-fc-nameTrack' },
-                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
-                  h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
-                ))
+            ? (motion.marquee
+                ? h('span', { className: 'dsh-fc-name is-marquee', 'aria-hidden': true },
+                    h('span', { className: 'dsh-fc-nameTrack' },
+                      h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                      h('span', { className: 'dsh-fc-nameChunk' }, `${spec.title} · ${t('workingHere')}`),
+                    ))
+                : h('span', { className: 'dsh-fc-name' }, `${spec.title} · ${t('workingHere')}`))
             : h('span', { className: 'dsh-fc-name' }, spec.title),
           attentionBadge(spec),
           flashes[spec.id] !== undefined
@@ -1002,12 +1040,12 @@
           h('button', {
             type: 'button',
             className: 'dsh-fc-segBtn' + (sort === 'manual' ? ' is-active' : ''),
-            onClick: () => setSort('manual'),
+            onClick: () => patchSettings({ sort: 'manual' }),
           }, t('sortManual')),
           h('button', {
             type: 'button',
             className: 'dsh-fc-segBtn' + (sort === 'recent' ? ' is-active' : ''),
-            onClick: () => setSort('recent'),
+            onClick: () => patchSettings({ sort: 'recent' }),
           }, t('sortRecent')),
         ),
         ),
@@ -1165,7 +1203,7 @@
       );
 
       return h('div', {
-        className: 'dsh-fc-root is-wide',
+        className: 'dsh-fc-root is-wide' + (motion.wiggle ? '' : ' no-wiggle') + (motion.celebrate ? '' : ' no-celebrate'),
         ref: rootRef,
         style: availHeight === null ? undefined : { height: availHeight + 'px' },
       },

@@ -21,10 +21,11 @@
 
 ```sh
 # 1. 改源码（不要直接改 client.js，它是构建产物）
-# 2. 构建
+# 2. 构建并跑冒烟检查
 npm run build
+npm test
 # 3. 安装到你的 Web profile（或在插件管理器里添加本目录）
-dsh plugin --profile desktop add link:$PWD
+dsh plugin --profile dsh add link:$PWD
 # 4. 刷新页面
 ```
 

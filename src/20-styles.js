@@ -425,6 +425,10 @@
   12% { transform: rotate(0.3deg); }
   14% { transform: rotate(0deg); }
 }
+/* Settings switches: the borders stay as static cues, the motion stops. */
+.dsh-fc-root.no-wiggle .dsh-fc-card.is-active,
+.dsh-fc-root.no-wiggle .dsh-fc-railBtn.is-active { animation: none; }
+.dsh-fc-root.no-celebrate .dsh-fc-done { display: none; }
 @keyframes dsh-fc-badge-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.35); opacity: 0.72; }

@@ -135,12 +135,13 @@
         };
 
         const history = createHistoryStore();
+        const settings = createSettingsStore();
 
         ctx.effect(() => ctx.slots.inject('sidebar.workspaces', () => ctx.slots.register({
           name: 'sidebar.workspaces',
           priority: -1,
           locale: NS,
-          inject: () => ({ api, history }),
+          inject: () => ({ api, history, settings }),
         }, FolderCards)), 'folder-cards: sidebar section');
 
         /* The way back sits in the composer tool row, next to the controls the
@@ -152,5 +153,15 @@
           locale: NS,
           inject: () => ({ api, history }),
         }, BackToConversation)), 'folder-cards: composer history chip');
+
+        /* Settings → Plugins → 文件夹卡片: motion switches and behaviour. */
+        ctx.effect(() => ctx.slots.inject('settings.section', () => ctx.slots.register({
+          name: 'settings.section',
+          id: 'folder-cards',
+          order: 40,
+          label: () => translate('settingsTitle'),
+          locale: NS,
+          inject: () => ({ settings }),
+        }, FolderCardsSettings)), 'folder-cards: settings page');
       },
     };

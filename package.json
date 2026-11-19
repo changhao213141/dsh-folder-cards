@@ -1,6 +1,6 @@
-﻿{
+{
   "name": "dsh-folder-cards",
-  "version": "0.6.1",
+  "version": "0.7.0",
   "type": "module",
   "description": "Folder-style workspace cards for the DeepSeek Harness sidebar: two 3:4 portrait cards per row, each with a folder glyph, an optional inserted image, and its own session list with a back button.",
   "exports": {
@@ -24,7 +24,9 @@
     "icon.svg"
   ],
   "scripts": {
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "test": "node test/smoke.mjs",
+    "check": "node build.mjs && node test/smoke.mjs"
   },
   "dsh": {
     "bundle": {
@@ -37,6 +39,7 @@
         "@deepseek-ai/dsh-client-ui-sidebar",
         "@deepseek-ai/dsh-client-ui-workspace",
         "@deepseek-ai/dsh-client-ui-conversation",
+        "@deepseek-ai/dsh-client-ui-settings",
         "@deepseek-ai/dsh-client-locale"
       ]
     }
