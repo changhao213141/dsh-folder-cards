@@ -1,6 +1,6 @@
 {
   "name": "dsh-folder-cards",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "type": "module",
   "description": "Folder-style workspace cards for the DeepSeek Harness sidebar: two 3:4 portrait cards per row, each with a folder glyph, an optional inserted image, and its own session list with a back button.",
   "exports": {

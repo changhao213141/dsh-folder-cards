@@ -90,6 +90,16 @@
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
 }
+.dsh-fc-set.is-compact { gap: 12px; font-size: 12px; padding: 0; }
+.dsh-fc-set.is-compact .dsh-fc-setGroup { gap: 2px; }
+.dsh-fc-set.is-compact .dsh-fc-setGroupTitle { font-size: 10px; padding-bottom: 0; }
+.dsh-fc-set.is-compact .dsh-fc-setRow { padding: 5px 0; gap: 8px; }
+.dsh-fc-set.is-compact .dsh-fc-setLabel { font-size: 12px; line-height: 16px; }
+.dsh-fc-set.is-compact .dsh-fc-setHint { font-size: 10px; line-height: 13px; }
+.dsh-fc-set.is-compact .dsh-fc-switch { width: 30px; height: 18px; margin-top: 1px; }
+.dsh-fc-set.is-compact .dsh-fc-switch::after { width: 12px; height: 12px; top: 2px; left: 2px; }
+.dsh-fc-set.is-compact .dsh-fc-switch[aria-checked="true"]::after { transform: translateX(12px); }
+.dsh-fc-set.is-compact .dsh-fc-setSegBtn { height: 22px; padding: 0 8px; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) {
   .dsh-fc-switch, .dsh-fc-switch::after { transition: none; }
 }
@@ -148,7 +158,7 @@
             onClick: option.onSelect,
           }, option.label))));
 
-      return h('div', { className: 'dsh-fc-set' },
+      return h('div', { className: 'dsh-fc-set' + (props.compact ? ' is-compact' : '') },
         h('style', null, SETTINGS_CSS),
         h('div', { className: 'dsh-fc-setGroup' },
           h('div', { className: 'dsh-fc-setGroupTitle' }, t('settingsGroupMotion')),

@@ -704,12 +704,12 @@ window.__ModuleLoader__.load({
 .dsh-fc-settingsPop {
   position: absolute;
   top: 38px;
+  left: 8px;
   right: 8px;
   z-index: 5;
-  width: 252px;
   max-height: calc(100% - 48px);
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
   background: var(--dsw-alias-bg-overlay);
@@ -2525,7 +2525,7 @@ window.__ModuleLoader__.load({
           ref: settingsPanelRef,
           role: 'dialog',
           'aria-label': t('settingsTitle'),
-        }, h(FolderCardsSettings, { settings: settingsStore, t })),
+        }, h(FolderCardsSettings, { settings: settingsStore, t, compact: true })),
       ] : null;
 
       const fallbackNode = fallbackMenu === null ? null : [
@@ -2859,6 +2859,16 @@ window.__ModuleLoader__.load({
   background: var(--dsw-alias-bg-layer-2);
   color: var(--dsw-alias-label-primary);
 }
+.dsh-fc-set.is-compact { gap: 12px; font-size: 12px; padding: 0; }
+.dsh-fc-set.is-compact .dsh-fc-setGroup { gap: 2px; }
+.dsh-fc-set.is-compact .dsh-fc-setGroupTitle { font-size: 10px; padding-bottom: 0; }
+.dsh-fc-set.is-compact .dsh-fc-setRow { padding: 5px 0; gap: 8px; }
+.dsh-fc-set.is-compact .dsh-fc-setLabel { font-size: 12px; line-height: 16px; }
+.dsh-fc-set.is-compact .dsh-fc-setHint { font-size: 10px; line-height: 13px; }
+.dsh-fc-set.is-compact .dsh-fc-switch { width: 30px; height: 18px; margin-top: 1px; }
+.dsh-fc-set.is-compact .dsh-fc-switch::after { width: 12px; height: 12px; top: 2px; left: 2px; }
+.dsh-fc-set.is-compact .dsh-fc-switch[aria-checked="true"]::after { transform: translateX(12px); }
+.dsh-fc-set.is-compact .dsh-fc-setSegBtn { height: 22px; padding: 0 8px; font-size: 11px; }
 @media (prefers-reduced-motion: reduce) {
   .dsh-fc-switch, .dsh-fc-switch::after { transition: none; }
 }
@@ -2917,7 +2927,7 @@ window.__ModuleLoader__.load({
             onClick: option.onSelect,
           }, option.label))));
 
-      return h('div', { className: 'dsh-fc-set' },
+      return h('div', { className: 'dsh-fc-set' + (props.compact ? ' is-compact' : '') },
         h('style', null, SETTINGS_CSS),
         h('div', { className: 'dsh-fc-setGroup' },
           h('div', { className: 'dsh-fc-setGroupTitle' }, t('settingsGroupMotion')),

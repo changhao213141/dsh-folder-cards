@@ -1035,7 +1035,7 @@
           ref: settingsPanelRef,
           role: 'dialog',
           'aria-label': t('settingsTitle'),
-        }, h(FolderCardsSettings, { settings: settingsStore, t })),
+        }, h(FolderCardsSettings, { settings: settingsStore, t, compact: true })),
       ] : null;
 
       const fallbackNode = fallbackMenu === null ? null : [

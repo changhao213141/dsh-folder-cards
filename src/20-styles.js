@@ -531,12 +531,12 @@
 .dsh-fc-settingsPop {
   position: absolute;
   top: 38px;
+  left: 8px;
   right: 8px;
   z-index: 5;
-  width: 252px;
   max-height: calc(100% - 48px);
   overflow-y: auto;
-  padding: 10px 12px;
+  padding: 8px 10px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
   background: var(--dsw-alias-bg-overlay);
