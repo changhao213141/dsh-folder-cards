@@ -691,7 +691,7 @@
       const attentionBadge = spec => (spec.attention === null
         ? null
         : h('span', {
-            className: 'dsh-fc-badge' + (spec.attention === 'pending' ? ' is-pending' : ''),
+            className: 'dsh-fc-badge' + (spec.attention === 'pending' ? ' is-pending' : ' is-done'),
             'aria-hidden': true,
           }));
 

@@ -346,7 +346,8 @@
 .dsh-fc-railBtn svg { width: 20px; height: 20px; }
 .dsh-fc-file { display: none; }
 /* Bottom-left attention dot on a folder card: amber means the folder waits for
-   an approval, a plan review or an answer; it pulses so it is noticed. */
+   an approval, a plan review or an answer; green means a run finished and has
+   not been opened yet. */
 .dsh-fc-badge {
   position: absolute;
   left: 6px;
@@ -360,6 +361,7 @@
   pointer-events: none;
 }
 .dsh-fc-card.has-image .dsh-fc-badge { bottom: 27px; }
+.dsh-fc-badge.is-done { background: var(--dsw-alias-state-success-primary); }
 .dsh-fc-badge.is-pending { animation: dsh-fc-badge-pulse 1.9s ease-in-out infinite; }
 @keyframes dsh-fc-badge-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }
