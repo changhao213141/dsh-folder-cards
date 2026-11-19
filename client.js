@@ -701,13 +701,15 @@ window.__ModuleLoader__.load({
 .dsh-fc-rowWrap:hover .dsh-fc-rowTime { opacity: 0; }
 .dsh-fc-archivedToggle { color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .dsh-fc-backdrop { position: absolute; inset: 0; z-index: 4; background: transparent; }
-.dsh-fc-viewMenu {
+.dsh-fc-settingsPop {
   position: absolute;
   top: 38px;
   right: 8px;
   z-index: 5;
-  min-width: 150px;
-  padding: 8px;
+  width: 252px;
+  max-height: calc(100% - 48px);
+  overflow-y: auto;
+  padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
   background: var(--dsw-alias-bg-overlay);
@@ -1138,6 +1140,18 @@ window.__ModuleLoader__.load({
       );
     }
 
+    function iconGear() {
+      return h('svg', { viewBox: '0 0 16 16', width: 14, height: 14, 'aria-hidden': true, focusable: false },
+        h('circle', { cx: 8, cy: 8, r: 2.1, fill: 'none', stroke: 'currentColor', strokeWidth: 1.3 }),
+        h('path', {
+          d: 'M8 1.9v1.6M8 12.5v1.6M1.9 8h1.6M12.5 8h1.6M3.7 3.7l1.1 1.1M11.2 11.2l1.1 1.1M12.3 3.7l-1.1 1.1M4.8 11.2l-1.1 1.1',
+          stroke: 'currentColor',
+          strokeWidth: 1.3,
+          strokeLinecap: 'round',
+        }),
+      );
+    }
+
     function historyGlyph() {
       return h('svg', { viewBox: '0 0 16 16', width: 13, height: 13, 'aria-hidden': true, focusable: false },
         h('path', { d: 'M6.4 3.6 3 7l3.4 3.4', stroke: 'currentColor', strokeWidth: 1.4, fill: 'none', strokeLinecap: 'round', strokeLinejoin: 'round' }),
@@ -1544,11 +1558,11 @@ window.__ModuleLoader__.load({
       const [searchOpen, setSearchOpen] = useState(false);
       const [remoteSearch, setRemoteSearch] = useState({ query: '', status: 'idle', items: [] });
       const [showArchived, setShowArchived] = useState(false);
-      const [viewOpen, setViewOpen] = useState(false);
+      const [settingsOpen, setSettingsOpen] = useState(false);
       const [fallbackMenu, setFallbackMenu] = useState(null);
       const [renaming, setRenaming] = useState(null);
-      const viewMenuRef = useRef(null);
-      const viewButtonRef = useRef(null);
+      const settingsButtonRef = useRef(null);
+      const settingsPanelRef = useRef(null);
       const fallbackRef = useRef(null);
       const renamePending = useRef(null);
       const fileRef = useRef(null);
@@ -1694,20 +1708,20 @@ window.__ModuleLoader__.load({
 
       /* Dismiss plugin-local popovers on an outside press. */
       useEffect(() => {
-        if (!viewOpen && fallbackMenu === null) return undefined;
+        if (!settingsOpen && fallbackMenu === null) return undefined;
         const onDown = event => {
           const target = event.target;
-          const inMenu = viewMenuRef.current && viewMenuRef.current.contains(target);
-          const inButton = viewButtonRef.current && viewButtonRef.current.contains(target);
+          const inPanel = settingsPanelRef.current && settingsPanelRef.current.contains(target);
+          const inButton = settingsButtonRef.current && settingsButtonRef.current.contains(target);
           const inFallback = fallbackRef.current && fallbackRef.current.contains(target);
-          if (!inMenu && !inButton && !inFallback) {
-            setViewOpen(false);
+          if (!inPanel && !inButton && !inFallback) {
+            setSettingsOpen(false);
             setFallbackMenu(null);
           }
         };
         document.addEventListener('pointerdown', onDown, true);
         return () => document.removeEventListener('pointerdown', onDown, true);
-      }, [viewOpen, fallbackMenu]);
+      }, [settingsOpen, fallbackMenu]);
 
       /* Debounced content search against the Host index, cancelled on change. */
       useEffect(() => {
@@ -2498,33 +2512,20 @@ window.__ModuleLoader__.load({
             )),
       );
 
-      const viewNode = viewOpen ? [
+      /* Settings live right here as well: one gear next to the other controls
+         opens the same switches the settings page renders. */      const settingsNode = settingsOpen ? [
         h('div', {
           key: 'backdrop',
           className: 'dsh-fc-backdrop',
-          onPointerDown: () => setViewOpen(false),
+          onPointerDown: () => setSettingsOpen(false),
         }),
         h('div', {
-          key: 'menu',
-          className: 'dsh-fc-viewMenu',
-          ref: viewMenuRef,
+          key: 'panel',
+          className: 'dsh-fc-settingsPop',
+          ref: settingsPanelRef,
           role: 'dialog',
-          'aria-label': t('viewOptions'),
-        },
-        h('div', { className: 'dsh-fc-viewLabel' }, t('sortBy')),
-        h('div', { className: 'dsh-fc-seg' },
-          h('button', {
-            type: 'button',
-            className: 'dsh-fc-segBtn' + (sort === 'manual' ? ' is-active' : ''),
-            onClick: () => patchSettings({ sort: 'manual' }),
-          }, t('sortManual')),
-          h('button', {
-            type: 'button',
-            className: 'dsh-fc-segBtn' + (sort === 'recent' ? ' is-active' : ''),
-            onClick: () => patchSettings({ sort: 'recent' }),
-          }, t('sortRecent')),
-        ),
-        ),
+          'aria-label': t('settingsTitle'),
+        }, h(FolderCardsSettings, { settings: settingsStore, t })),
       ] : null;
 
       const fallbackNode = fallbackMenu === null ? null : [
@@ -2723,13 +2724,13 @@ window.__ModuleLoader__.load({
               }, iconSearch()),
           h('button', {
             type: 'button',
-            ref: viewButtonRef,
+            ref: settingsButtonRef,
             className: 'dsh-fc-iconbtn',
-            title: t('viewOptions'),
-            'aria-label': t('viewOptions'),
-            'aria-expanded': viewOpen ? 'true' : 'false',
-            onClick: () => setViewOpen(value => !value),
-          }, iconSliders()),
+            title: t('settingsTitle'),
+            'aria-label': t('settingsTitle'),
+            'aria-expanded': settingsOpen ? 'true' : 'false',
+            onClick: () => setSettingsOpen(value => !value),
+          }, iconGear()),
           h('button', {
             type: 'button',
             className: 'dsh-fc-iconbtn',
@@ -2739,7 +2740,7 @@ window.__ModuleLoader__.load({
             onClick: addWorkspace,
           }, iconPlus()),
         ),
-        viewNode,
+        settingsNode,
         statusText === '' ? null : h('div', { className: 'dsh-fc-notice', role: 'status' }, statusText),
         h('div', { className: 'dsh-fc-body' },
           query.trim() !== ''

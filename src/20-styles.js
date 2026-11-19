@@ -528,13 +528,15 @@
 .dsh-fc-rowWrap:hover .dsh-fc-rowTime { opacity: 0; }
 .dsh-fc-archivedToggle { color: var(--dsw-alias-label-secondary); font-size: 11px; }
 .dsh-fc-backdrop { position: absolute; inset: 0; z-index: 4; background: transparent; }
-.dsh-fc-viewMenu {
+.dsh-fc-settingsPop {
   position: absolute;
   top: 38px;
   right: 8px;
   z-index: 5;
-  min-width: 150px;
-  padding: 8px;
+  width: 252px;
+  max-height: calc(100% - 48px);
+  overflow-y: auto;
+  padding: 10px 12px;
   border: 1px solid var(--dsw-alias-border-l1);
   border-radius: 10px;
   background: var(--dsw-alias-bg-overlay);

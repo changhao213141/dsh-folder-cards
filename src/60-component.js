@@ -68,11 +68,11 @@
       const [searchOpen, setSearchOpen] = useState(false);
       const [remoteSearch, setRemoteSearch] = useState({ query: '', status: 'idle', items: [] });
       const [showArchived, setShowArchived] = useState(false);
-      const [viewOpen, setViewOpen] = useState(false);
+      const [settingsOpen, setSettingsOpen] = useState(false);
       const [fallbackMenu, setFallbackMenu] = useState(null);
       const [renaming, setRenaming] = useState(null);
-      const viewMenuRef = useRef(null);
-      const viewButtonRef = useRef(null);
+      const settingsButtonRef = useRef(null);
+      const settingsPanelRef = useRef(null);
       const fallbackRef = useRef(null);
       const renamePending = useRef(null);
       const fileRef = useRef(null);
@@ -218,20 +218,20 @@
 
       /* Dismiss plugin-local popovers on an outside press. */
       useEffect(() => {
-        if (!viewOpen && fallbackMenu === null) return undefined;
+        if (!settingsOpen && fallbackMenu === null) return undefined;
         const onDown = event => {
           const target = event.target;
-          const inMenu = viewMenuRef.current && viewMenuRef.current.contains(target);
-          const inButton = viewButtonRef.current && viewButtonRef.current.contains(target);
+          const inPanel = settingsPanelRef.current && settingsPanelRef.current.contains(target);
+          const inButton = settingsButtonRef.current && settingsButtonRef.current.contains(target);
           const inFallback = fallbackRef.current && fallbackRef.current.contains(target);
-          if (!inMenu && !inButton && !inFallback) {
-            setViewOpen(false);
+          if (!inPanel && !inButton && !inFallback) {
+            setSettingsOpen(false);
             setFallbackMenu(null);
           }
         };
         document.addEventListener('pointerdown', onDown, true);
         return () => document.removeEventListener('pointerdown', onDown, true);
-      }, [viewOpen, fallbackMenu]);
+      }, [settingsOpen, fallbackMenu]);
 
       /* Debounced content search against the Host index, cancelled on change. */
       useEffect(() => {
@@ -1022,33 +1022,20 @@
             )),
       );
 
-      const viewNode = viewOpen ? [
+      /* Settings live right here as well: one gear next to the other controls
+         opens the same switches the settings page renders. */      const settingsNode = settingsOpen ? [
         h('div', {
           key: 'backdrop',
           className: 'dsh-fc-backdrop',
-          onPointerDown: () => setViewOpen(false),
+          onPointerDown: () => setSettingsOpen(false),
         }),
         h('div', {
-          key: 'menu',
-          className: 'dsh-fc-viewMenu',
-          ref: viewMenuRef,
+          key: 'panel',
+          className: 'dsh-fc-settingsPop',
+          ref: settingsPanelRef,
           role: 'dialog',
-          'aria-label': t('viewOptions'),
-        },
-        h('div', { className: 'dsh-fc-viewLabel' }, t('sortBy')),
-        h('div', { className: 'dsh-fc-seg' },
-          h('button', {
-            type: 'button',
-            className: 'dsh-fc-segBtn' + (sort === 'manual' ? ' is-active' : ''),
-            onClick: () => patchSettings({ sort: 'manual' }),
-          }, t('sortManual')),
-          h('button', {
-            type: 'button',
-            className: 'dsh-fc-segBtn' + (sort === 'recent' ? ' is-active' : ''),
-            onClick: () => patchSettings({ sort: 'recent' }),
-          }, t('sortRecent')),
-        ),
-        ),
+          'aria-label': t('settingsTitle'),
+        }, h(FolderCardsSettings, { settings: settingsStore, t })),
       ] : null;
 
       const fallbackNode = fallbackMenu === null ? null : [
@@ -1247,13 +1234,13 @@
               }, iconSearch()),
           h('button', {
             type: 'button',
-            ref: viewButtonRef,
+            ref: settingsButtonRef,
             className: 'dsh-fc-iconbtn',
-            title: t('viewOptions'),
-            'aria-label': t('viewOptions'),
-            'aria-expanded': viewOpen ? 'true' : 'false',
-            onClick: () => setViewOpen(value => !value),
-          }, iconSliders()),
+            title: t('settingsTitle'),
+            'aria-label': t('settingsTitle'),
+            'aria-expanded': settingsOpen ? 'true' : 'false',
+            onClick: () => setSettingsOpen(value => !value),
+          }, iconGear()),
           h('button', {
             type: 'button',
             className: 'dsh-fc-iconbtn',
@@ -1263,7 +1250,7 @@
             onClick: addWorkspace,
           }, iconPlus()),
         ),
-        viewNode,
+        settingsNode,
         statusText === '' ? null : h('div', { className: 'dsh-fc-notice', role: 'status' }, statusText),
         h('div', { className: 'dsh-fc-body' },
           query.trim() !== ''
